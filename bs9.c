@@ -4,9 +4,9 @@
 Bit Shift Assembler
 *******************
 
-Version: 30-Sep-2019
+Version: 15-Nov-2019
 
-The assembler was developed and tested on a MAC with macOS Mojave.
+The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
 computer with a standard C-compiler, e.g. Linux, Windows, Amiga OS, etc.
 
@@ -52,6 +52,18 @@ Directives
 ==========
 CPU_6809 = 1                   allow code for 6809 only
 CPU_6309 = 1                   allow full 6309 instruction set
+
+Labels and Constants
+====================
+
+LABEL   LDX  #Value            define LABEL for current PC
+TXTPTR  = $21b8                define constant TXTPTR
+OLDPTR  EQU $21ba              define constant OLDPTR
+CURRENT SET 5                  define variable CURRENT
+
+Labels and constants can have only one value.
+Variables, which get their value assigned with "SET",
+may change their values.
 
 Examples of pseudo opcodes (directives):
 ========================================
@@ -1046,7 +1058,7 @@ void ExtractOpText(char *p)
 
 char *DefineLabel(char *p, int *val, int Locked)
 {
-   int j,l,v;
+   int j,l,v,var;
 
    if (Labels > MAXLAB -2)
    {
@@ -1058,7 +1070,8 @@ char *DefineLabel(char *p, int *val, int Locked)
    if (*p == ':') ++p; // Ignore colon after label
    l = strlen(Label);
    p = SkipSpace(p);
-   if (*p == '=' || strncmp(p,"EQU ",4) == 0)
+   var = strncmp(p,"SET ",4) == 0; // variable
+   if (*p == '=' || strncmp(p,"EQU ",4) == 0 || var)
    {
       if (*p == '=') p++;
       else           p+=4;
@@ -1078,7 +1091,7 @@ char *DefineLabel(char *p, int *val, int Locked)
       ExtractOpText(p);
       p += strlen(p);
       EvalOperand(OpText,&v,0);
-      if (lab[j].Address == UNDEF) lab[j].Address = v;
+      if (lab[j].Address == UNDEF || var) lab[j].Address = v;
       else if (lab[j].Address != v && !lab[j].Locked)
       {
          ++ErrNum;
