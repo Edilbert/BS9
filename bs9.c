@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 15-Nov-2019
+Version: 09-Dec-2019
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -43,7 +43,7 @@ FCB fcb Fcb are all equivalent (define byte data)
 
 Label and named constants are case sensitive by default!
 The option "-i" switches off the case sensitivity for symbols.
-Also the pseudo op "!CASE +/-" may be used to switch sensitivity.
+Also the pseudo op "CASE +/-" may be used to switch sensitivity.
 
 LDA #Cr  and LDA #CR  use different constants!
 JMP Lab_10 and JMP LAB_10  jump to different targets!
@@ -64,23 +64,23 @@ CURRENT SET 5                  define variable CURRENT
 Labels and constants can have only one value.
 Variables, which get their value assigned with "SET",
 may change their values.
+Labels that are defined by their current position must start
+at the first column.
 
 Examples of pseudo opcodes (directives):
 ========================================
-!ORG  $E000                    set program counter
-!LOAD $0401                    precede binary with a CBM load address
-!STORE BASIC_ROM,$2000,"basic.rom" write binary image file "basic.rom"
-!BITS . . * . * . . .          stores a byte from 8 bit symbols
-!BYTE $20,"Example",0          stores a series of byte data
-!WORD LAB_10, WriteTape,$0200  stores a series of word data
-!QUAD 100000                   stores a 32 bit integer
-!REAL  3.1415926               stores a 32 bit real
-!FILL  N ($EA)                 fill memory with N bytes containing $EA
-!FILL  $A000 - * (0)           fill memory from pc(*) upto $9FFF
-!INCLUDE "filename"            includes specified file
-!END                           stops assembly
-!CASE -                        symbols are not case sensitive
-!SIZE                          print code size info
+ORG  $E000                     set program counter
+STORE BASIC_ROM,$2000,"basic.rom" write binary image file "basic.rom"
+BITS . . * . * . . .           stores a byte from 8 bit symbols
+BYTE $20,"Example",0           stores a series of byte data
+WORD LAB_10, WriteTape,$0200   stores a series of word data
+REAL  3.1415926                stores a 32 bit real
+FILL  N ($EA)                  fill memory with N bytes containing $EA
+FILL  $A000 - * (0)            fill memory from pc(*) upto $9FFF
+INCLUDE "filename"             includes specified file
+END                            stops assembly
+CASE -                         symbols are not case sensitive
+SIZE                           print code size info
 TXTTAB .BSS 2                  define TXTTAB and increase address pointer by 2
   * = $E000                    set program counter
   & = $033A                    set BSS address pointer
@@ -565,17 +565,12 @@ int ERRMAX = 10;    // Stop assemby after ERRMAX errors
 int ErrNum;
 int LoadAddress = UNDEF;
 int WriteLoadAddress = 0;
-int MacroStopped;
-int InsideMacro;
-int CurrentMacro;
+int MacLev;
 int ModuleStart;       // address of a module
 int ModuleTrigger;     // start of module
 int FormLn;            // lines per page [inactive]
 int DP;                // current direct page
 int CodeStyle;         // 1: Operand has no spaces
-
-char TTL[256];         // current title
-char *MacroPointer;
 
 int MneIndex;          // Current mnemonic
 
@@ -593,7 +588,7 @@ int Phase;
 int IfLevel;
 int Skipping;
 int SkipLine[10];
-int ForcedEnd;    // Triggered by .END command
+int ForcedEnd;    // Triggered by END command
 int IgnoreCase;   // 1: Ignore case for symbols
 
 // Filenames
@@ -679,7 +674,8 @@ struct MacroStruct
    int  Type;   // 0: name(arg1,arg2))  1: name arg1,arg2
 } Mac[MAXMAC];
 
-int Macros;
+char *MacPtr[MAXMAC]; // pointer inside macro body
+int Macros;                 // total number of macros
 
 
 char *SkipSpace(char *p)
@@ -704,6 +700,21 @@ char *StrMatch(char *s, char *m)
       if (i == l) return (s + j);
    }
    return NULL;
+}
+
+// Check if keyword (m) is in string (s)
+// Make sure, it's not part of a larger word
+// by checking the characters before and after
+
+char *StrKey(char *s, char *m)
+{
+   char *r = StrMatch(s,m);
+   if (r) // match was true
+   {
+      if (r > s && isalnum(*(r-1))) r = NULL; // check before
+      if (isalnum(*(r+strlen(m))))  r = NULL; // check after
+   }
+   return r;
 }
 
 int isym(char c)
@@ -736,6 +747,16 @@ char *NextSymbol(char *p, char *s)
    return p;
 }
 
+// Check if string s2 is a word in s1
+// and search string is followed by a white space
+
+int strcmpword(const char *s1, const char *s2)
+{
+   int l = strlen(s2);
+   int r = strncasecmp(s1,s2,l);
+   if (r == 0 && s1[l] && !isspace(s1[l])) r = 1;
+   return r;
+}
 
 char *SkipHexCode(char *p)
 {
@@ -1070,11 +1091,18 @@ char *DefineLabel(char *p, int *val, int Locked)
    if (*p == ':') ++p; // Ignore colon after label
    l = strlen(Label);
    p = SkipSpace(p);
-   var = strncmp(p,"SET ",4) == 0; // variable
-   if (*p == '=' || strncmp(p,"EQU ",4) == 0 || var)
+
+   // check for definition of variables
+
+   var = strcmpword(p,"SET") == 0;
+
+   // assignment with SET, EQU or =
+
+   if (strcmpword(p,"EQU") == 0 || *p == '=' || var)
    {
+      if (df) fprintf(df,"LABVAL:%s:\n",p);
       if (*p == '=') p++;
-      else           p+=4;
+      else           p+=4; // length of "SET" or "EQU" + delimiter
       j = LabelIndex(Label);
       if (j < 0)
       {
@@ -1104,7 +1132,7 @@ char *DefineLabel(char *p, int *val, int Locked)
       *val = v;
       if (Locked) lab[j].Locked = Locked;
    }
-   else if (!strncasecmp(p,".BSS",4))
+   else if (!strcmpword(p,".BSS"))
    {
       p = EvalOperand(p+4,&v,0);
       j = LabelIndex(Label);
@@ -1359,8 +1387,25 @@ char *EvalDecValue(char *p, int *v)
 
 char *EvalCharValue(char *p, int *v)
 {
-   *v = *p++;
-   if (*p == '\'') ++p; // optional closing apostrophe
+   *v = 0;                    // preset with chr(0)
+   if (*p != '\'') *v = *p++; // fetch one character
+   if (*p == '\'') ++p;       // optional closing apostrophe
+   return p;
+}
+
+
+char *EvalMultiCharValue(char *p, int *v)
+{
+   int i;
+
+   *v = 0;                     // preset with zero
+   for (i=0 ; i < 4 ; ++i)
+   {
+      if (*p == '\"') break;   // end quote
+      *v = (*v << 8) | *p++;
+   }
+   if (*p == '\"') ++p;        // end quote
+   else ErrorMsg("Multi character operand too long ( > 4 )\n");
    return p;
 }
 
@@ -1422,6 +1467,7 @@ char *op_hig(char *p, int *v) { p = EvalOperand(p+1,v,12);ex = 1        ; return
 char *op_prc(char *p, int *v) { *v = pc; return p+1;}
 char *op_hex(char *p, int *v) { return EvalHexValue(p+1,v) ;}
 char *op_cha(char *p, int *v) { return EvalCharValue(p+1,v);}
+char *op_muc(char *p, int *v) { return EvalMultiCharValue(p+1,v);}
 char *op_bin(char *p, int *v) { return EvalBinValue(p+1,v) ;}
 char *op_len(char *p, int *v) { return EvalSymBytes(p+1,v) ;}
 
@@ -1431,11 +1477,10 @@ struct unaop_struct
    char *(*foo)(char*,int*);
 };
 
-#define UNAOPS 13
 
 // table of unary operators in C style
 
-struct unaop_struct unaop[UNAOPS] =
+struct unaop_struct unaop[] =
 {
    {'<',&op_low}, // low byte
    {'>',&op_hig}, // extended
@@ -1448,9 +1493,12 @@ struct unaop_struct unaop[UNAOPS] =
    {'*',&op_prc}, // program counter
    {'$',&op_hex}, // hex constant
    { 39,&op_cha}, // char constant
+   { 34,&op_muc}, // multi char constant
    {'%',&op_bin}, // binary constant
    {'?',&op_len}  // length of .BYTE data line
 };
+
+#define UNAOPS (sizeof(unaop) / sizeof(struct unaop_struct))
 
 int op_mul(int l, int r) { return l *  r; }
 int op_div(int l, int r) { if (r) return l / r; else return UNDEF; }
@@ -1527,7 +1575,7 @@ char *EvalOperand(char *p, int *v, int prio)
    // Start parsing unary operators
    // PC represents the current program counter
 
-   if (*p && strchr("[(+-!~<>*$'%?",*p))
+   if (*p && strchr("[(+-!~<>*$'\"%?",*p))
    {
       for (i=0 ; i < UNAOPS ; ++i)
       if (*p == unaop[i].op)
@@ -1557,13 +1605,14 @@ char *EvalOperand(char *p, int *v, int prio)
    {
       *v = r;
       p += strlen(p);
+      if (df) fprintf(df,"Result: %4x %d\n",r,r);
       return p;
    }
    p = SkipSpace(p);
 
    // Unary operands are not allowed here
 
-   if (*p && strchr("[!~<>$'%?",*p))
+   if (*p && strchr("[!~$'%?",*p))
    {
       ErrorMsg("Syntax error: need binary operator or end of expression\n");
       ErrorLine(p);
@@ -1583,6 +1632,7 @@ char *EvalOperand(char *p, int *v, int prio)
             {
                *v = r;
                if (CodeStyle == 1 && *p == ' ') p += strlen(p);
+               if (df) fprintf(df,"Result: %4x %d\n",r,r);
                return p;
             }
             p = EvalOperand(p+l,&w,o);
@@ -1594,6 +1644,7 @@ char *EvalOperand(char *p, int *v, int prio)
    }
    *v = r;
    if (CodeStyle == 1 && *p == ' ') p += strlen(p);
+   if (df) fprintf(df,"Result: %4x %d\n",r,r);
    return p;
 }
 
@@ -1708,14 +1759,14 @@ char *IncludeFile(char *p)
    p = NeedChar(p,'"');
    if (!p)
    {
-      ErrorMsg("Missing quoted filename after .INCLUDE\n");
+      ErrorMsg("Missing quoted filename after INCLUDE\n");
       exit(1);
    }
    fp = FileName;
    ++p;
    while (*p != 0 && *p != '"') *fp++ = *p++;
    *fp = 0;
-   // printf("fopen %s\n",FileName);
+   if (df) fprintf(df,"fopen %s\n",FileName);
    if (IncludeLevel >= 99)
    {
       ErrorMsg("Too many includes nested ( >= 99)\n");
@@ -1733,7 +1784,7 @@ char *IncludeFile(char *p)
    strcpy(IncludeStack[IncludeLevel].Src, FileName);
    PrintLine();
    LiNo = 0;
-   return p;
+   return p+1; // skip quote after filename
 }
 
 char *ParseStoreData(char *p)
@@ -1840,7 +1891,7 @@ char *ParseBitData(char *p)
    return p + strlen(p);
 }
 
-char *ParseCharData(char *p)
+char *ParseCmapData(char *p)
 {
    int i,v,scanline;
 
@@ -1855,7 +1906,7 @@ char *ParseCharData(char *p)
       if (*p == '*') v |= 1;
       else if (*p != '.')
       {
-         ErrorMsg("use only '*' for 1 and '.' for 0 in CHAR statement\n");
+         ErrorMsg("use only '*' for 1 and '.' for 0 in CMAP statement\n");
          exit(1);
       }
    }
@@ -2023,80 +2074,96 @@ char *ParseStringData(char *p)
    return p;
 }
 
+// Functions for pseudo ops
 
-char *CheckPseudo(char *p)
+char *ps_bits(char *p)   { PrintPC(); return ParseBitData(p); }
+char *ps_cmap(char *p)   { PrintPC(); return ParseCmapData(p); }
+char *ps_byte(char *p)   { PrintPC(); return ParseByteData(p); }
+char *ps_word(char *p)   { PrintPC(); return ParseWordData(p); }
+char *ps_string(char *p) { PrintPC(); return ParseStringData(p); }
+char *ps_real(char *p)   { PrintPC(); return ParseRealData(p); }
+char *ps_fill(char *p)   { PrintPC(); return ParseFillData(p); }
+char *ps_case(char *p)   { PrintPC(); return ParseCaseData(p); }
+char *ps_bss(char *p)    { PrintPC(); return ParseBSSData(p); }
+char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
+char *ps_store(char *p)  { PrintPC(); return ParseStoreData(p); }
+char *ps_include(char *p){ PrintPC(); return IncludeFile(p); }
+char *ps_end(char *p)    { PrintLine(); ForcedEnd = 1; return p; }
+char *ps_ignore(char *p) { PrintLine(); return p; }
+char *ps_formln(char *p) { FormLn = atoi(p); PrintByteLine(FormLn); return p; }
+
+char *ps_org(char *p)
+{
+   ExtractOpText(p);
+   EvalOperand(OpText,&pc,0);
+   PrintPCLine();
+   return p;
+}
+
+char *ps_sect(char *p)
 {
    char *q;
 
+   q = StrMatch(p,"LOC=");
+   if (q) q = EvalOperand(q+4,&pc,0);
+   PrintPCLine();
+   return p;
+}
+
+char *ps_setdp(char *p)
+{
+   ExtractOpText(p);
+   EvalOperand(OpText,&DP,0);
+   PrintByteLine(DP);
+   return p;
+}
+
+struct PseudoStruct
+{
+   char *keyword;
+   char *(*foo)(char *);
+};
+
+struct PseudoStruct PseudoTab[] =
+{
+   {"BITS"   , &ps_bits   },
+   {"BSS"    , &ps_bss    },
+   {"BYTE"   , &ps_byte   },
+   {"CASE"   , &ps_case   },
+   {"CMAP"   , &ps_cmap   },
+   {"END"    , &ps_end    },
+   {"EXTERN" , &ps_ignore },
+   {"FILL"   , &ps_fill   },
+   {"INCLUDE", &ps_include},
+   {"INTERN" , &ps_ignore },
+   {"FCB"    , &ps_byte   },
+   {"FCC"    , &ps_string },
+   {"FDB"    , &ps_word   },
+   {"FORMLN" , &ps_formln },
+   {"ORG"    , &ps_org    },
+   {"REAL"   , &ps_real   },
+   {"SECT"   , &ps_sect   },
+   {"SETDP"  , &ps_setdp  },
+   {"SIZE"   , &ps_size   },
+   {"STORE"  , &ps_store  },
+   {"TTL"    , &ps_ignore },
+   {"WORD"   , &ps_word   }
+};
+
+#define PSEUDOS (sizeof(PseudoTab) / sizeof(struct PseudoStruct))
+
+char *CheckPseudo(char *p)
+{
+   int i;
+
    p = SkipSpace(p);
-   if (!strncasecmp(p,"ORG ",4))
+
+   for (i=0 ; i < PSEUDOS ; ++i)
+   if (!strcmpword(p,PseudoTab[i].keyword))
    {
-      ExtractOpText(p+4);
-      EvalOperand(OpText,&pc,0);
-      PrintPCLine();
-      p += strlen(p);
-      if (df) fprintf(df,"PC = $%4.4x\n",pc);
-   }
-   if (!strncasecmp(p,"FORMLN",6))
-   {
-      FormLn = atoi(p+6);
-      PrintByteLine(FormLn);
-      p += strlen(p);
-   }
-   else if (!strncasecmp(p,"SETDP",5))
-   {
-      ExtractOpText(p+5);
-      EvalOperand(OpText,&DP,0);
-      PrintByteLine(DP);
-      p += strlen(p);
-   }
-   else if (!strncasecmp(p,"SECT ",5))
-   {
-      q = StrMatch(p+4,"LOC=");
-      if (q) q = EvalOperand(q+4,&pc,0);
-      PrintPCLine();
-      p += strlen(p);
-   }
-   else if (!strncasecmp(p,"INTERN",6))
-   {
-      PrintLine();
-      p += strlen(p);
-   }
-   else if (!strncasecmp(p,"EXTERN",6))
-   {
-      PrintLine();
-      p += strlen(p);
-   }
-   else if (!strncasecmp(p,"TTL",3))
-   {
-      PrintLine();
-      // CodeStyle = 1;
-      p = SkipSpace(p);
-      strcpy(TTL,p);
-      p += strlen(p);
-   }
-   else if (!strncasecmp(p,"FDB ",4))
-   {
-      PrintPC();
-      p = ParseWordData(p+4);
-      p += strlen(p);
-   }
-   else if (!strncasecmp(p,"FCB ",4))
-   {
-      PrintPC();
-      p = ParseByteData(p+4);
-      p += strlen(p);
-   }
-   else if (!strncasecmp(p,"FCC ",4))
-   {
-      PrintPC();
-      p = ParseStringData(p+4);
-      p += strlen(p);
-   }
-   else if (!strncasecmp(p,"INCLUDE",7))
-   {
-      PrintPC();
-      p = IncludeFile(p+7);
+      p = PseudoTab[i].foo(p+strlen(PseudoTab[i].keyword));
+      p += strlen(p); // ignore trailing characters
+      break;
    }
 
    if (pc > 0x10000)
@@ -2107,8 +2174,6 @@ char *CheckPseudo(char *p)
    }
    return p;
 }
-
-
 
 
 void AdjustOpcode(char *p)
@@ -2128,9 +2193,9 @@ int CheckCondition(char *p)
 {
    int r,v,Ifdef,Ifval;
    r = 0;
-   if (*p != '#') return 0; // No preprocessing
-   p = SkipSpace(p+1);
-   if (!strncasecmp(p,"error", 5) && (Phase == 1))
+   if (df) fprintf(df,"Check <%s>\n",p);
+   if (*p == '#') ++p; // old syntax #if, #endif, etc.
+   if (!strcmpword(p,"error") && (Phase == 1))
    {
       CheckSkip();
       if (Skipping)
@@ -2142,8 +2207,8 @@ int CheckCondition(char *p)
       free(msg);
       exit(1);
    }
-   Ifdef = !strncasecmp(p,"ifdef ",6);
-   Ifval = !strncasecmp(p,"if "   ,3);
+   Ifdef = !strcmpword(p,"ifdef");
+   Ifval = !strcmpword(p,"if");
    if (Ifdef || Ifval)
    {
       r = 1;
@@ -2151,7 +2216,7 @@ int CheckCondition(char *p)
       if (IfLevel > 9)
       {
          ++ErrNum;
-         ErrorMsg("More than 10  #IF or #IFDEF conditions nested\n");
+         ErrorMsg("More than 10  IF or IFDEF conditions nested\n");
          exit(1);
       }
       if (Ifdef)
@@ -2175,7 +2240,7 @@ int CheckCondition(char *p)
       }
       if (df) fprintf(df,"%5d %4.4x          %s\n",LiNo,SkipLine[IfLevel],Line);
    }
-   else if (!strncasecmp(p,"else",4) && (p[4] == 0 || isspace(p[4])))
+   else if (!strcmpword(p,"else"))
    {
       r = 1;
       SkipLine[IfLevel] = !SkipLine[IfLevel];
@@ -2183,8 +2248,9 @@ int CheckCondition(char *p)
       PrintLiNo(1);
       if (Phase == 2) fprintf(lf,"              %s\n",Line);
    }
-   if (!strncasecmp(p,"endif",5) && (p[5] == 0 || isspace(p[5])))
+   if (!strcmpword(p,"endif"))
    {
+   if (df) fprintf(df,"inside Check endif\n");
       r = 1;
       IfLevel--;
       PrintLiNo(1);
@@ -2449,7 +2515,7 @@ int ScanPushList(char *p)
       {
          Reg = PushList[i].Reg;
          l = strlen(Reg);
-         if (!strncasecmp(p,Reg,l)) break;
+         if (!strcmpword(p,Reg)) break;
       }
       if (i < 0) OperandError();
       v |= PushList[i].Val;
@@ -2881,7 +2947,7 @@ int ScanArgs(char *p, char *args, int ptr[])
    while (*p && n < 10)
    {
       p = SkipSpace(p);
-      if (strncasecmp(p,"ARG",3)) break; // end of list
+      if (strcmpword(p,"ARG")) break; // end of list
       p = NextSymbol(p,sym);
       l = strlen(sym);
       if (l) strcpy(args+ptr[n],sym);
@@ -2914,8 +2980,8 @@ void RecordMacro(char *p)
    }
 
    bl = 1;
-   mf = strncasecmp(p,"MACRO",5); // 1 : name MACRO
-   if (!mf) p += 5;               // 0 : MACRO name
+   mf = strcmpword(p,"MACRO"); // 1 : name MACRO
+   if (!mf) p += 5;            // 0 : MACRO name
 
    p = NextSymbol(p,Macro);
    l = strlen(Macro);
@@ -2944,7 +3010,7 @@ void RecordMacro(char *p)
       fprintf(df,")\n");
    }
    j = MacroIndex(Macro);
-   if (j < 0)
+   if (j < 0)  // create new entry in macro table
    {
       j = Macros;
       Mac[j].Name = MallocOrDie(l+1);
@@ -2958,6 +3024,9 @@ void RecordMacro(char *p)
          l = strlen(Line);
          if (l && Line[l-1] == 10) Line[--l] = 0; // Remove linefeed
          if (l && Line[l-1] == 13) Line[--l] = 0; // Remove return
+
+         // parse line and substitute arguments
+
          p = Line;
          b = Buf;
          while (*p)
@@ -2978,6 +3047,12 @@ void RecordMacro(char *p)
          }
          *b++ = '\n';
          *b = 0;
+
+         if (df)
+         {
+            fprintf(df,"MAC line  :%s\n",Line);
+            fprintf(df,"MAC parsed:%s\n",Buf);
+         }
          l = strlen(Buf);
          if (bl == 1)
          {
@@ -2994,6 +3069,7 @@ void RecordMacro(char *p)
          fgets(Line,sizeof(Line),sf);
       }
       Macros++;
+      if (df) fprintf(df,"finished macro %d\n",Macros);
    }
    else if (Phase == 2) // List macro
    {
@@ -3029,7 +3105,7 @@ int ExpandMacro(char *m)
 
    j = MacroIndex(m);
    if (j < 0) return j;
-   if (df) fprintf(df,"Expanding [%s] phase %d\n",Mac[j].Name,Phase);
+   if (df) fprintf(df,"\nExpanding [%s] phase %d\n",Mac[j].Name,Phase);
 
    p = NextSymbol(m,Macro);
    p = SkipSpace(p);
@@ -3046,9 +3122,10 @@ int ExpandMacro(char *m)
             Macro,an,Mac[j].Narg);
       exit(1);
    }
-   CurrentMacro = j;
-   ++InsideMacro;
-   MacroPointer = Mac[j].Body;
+   ++MacLev;
+   MacPtr[MacLev] = Mac[j].Body;
+   if (df) fprintf(df,"Macro Level:%d\n",MacLev);
+   if (df) fprintf(df,"Macro Body :<<<%s>>>\n",Mac[j].Body);
 
    if (Phase == 2)
    {
@@ -3064,78 +3141,39 @@ void NextMacLine(char *w)
    int i;
    char *r;
 
+   if (df) fprintf(df,"Next Macro Line:%s\n",w);
    if (!WithLiNo) --LiNo; // -n : count macro lines
-   if (*MacroPointer)
+
+   // check for end of macro body
+
+   while (MacLev > 0 && *MacPtr[MacLev] == 0) --MacLev;
+
+   if (df) fprintf(df,"MacPtr[%d] = {{%s}}\n",MacLev,MacPtr[MacLev]);
+
+   if (MacPtr[MacLev] && *MacPtr[MacLev])
    {
-      while (*MacroPointer && *MacroPointer != '\n')
+      while (*MacPtr[MacLev] &&
+             *MacPtr[MacLev] != '\n')
       {
-         if (*MacroPointer == '&')
+         if (*MacPtr[MacLev] == '&')
          {
-            i = *(++MacroPointer) - '0';
+            i = *(++MacPtr[MacLev]) - '0';
             r = MacArgs + ArgPtr[i];
             while (*r) *w++ = *r++;
-            ++MacroPointer;
+            ++MacPtr[MacLev];
          }
-         else *w++ = *MacroPointer++;
+         else *w++ = *MacPtr[MacLev]++;
       }
-      if (*MacroPointer == '\n') ++MacroPointer;
-   }
-   else
-   {
-      CurrentMacro = 0;
-      --InsideMacro;
-      MacroPointer = NULL;
-      MacroStopped = 1;
+      if (*MacPtr[MacLev] == '\n') ++MacPtr[MacLev];
    }
    *w = 0;
 }
 
 
-char *IsData(char *p)
-{
-   p = SkipSpace(p+1);
-   if (pc < 0 && strncasecmp(p,"ORG",3) && strncasecmp(p,"BSS",3) &&
-       strncasecmp(p,"STORE",5))
-   {
-      ErrorLine(p);
-      ErrorMsg("Undefined program counter (PC)\n");
-      exit(1);
-   }
-        if (!strncasecmp(p,"WORD",4))    p = ParseWordData(p+4);
-   else if (!strncasecmp(p,"BYTE",4))    p = ParseByteData(p+4);
-   else if (!strncasecmp(p,"BITS",4))    p = ParseBitData(p+4);
-   else if (!strncasecmp(p,"CHA" ,3))    p = ParseCharData(p+3);
-   else if (!strncasecmp(p,"REAL",4))    p = ParseRealData(p+4);
-   else if (!strncasecmp(p,"FILL",4))    p = ParseFillData(p+4);
-   else if (!strncasecmp(p,"BSS",3))     p = ParseBSSData(p+4);
-   else if (!strncasecmp(p,"STORE",5))   p = ParseStoreData(p+5);
-   else if (!strncasecmp(p,"CASE",4))    p = ParseCaseData(p+4);
-   else if (!strncasecmp(p,"ORG",3))     p = SetPC(p);
-   else if (!strncasecmp(p,"INCLUDE",7)) p = IncludeFile(p+7);
-   else if (!strncasecmp(p,"SIZE",4))    p = ListSizeInfo(p);
-   else if (!strncasecmp(p,"END",3))
-   {
-      p += 3; ForcedEnd = 1;
-      PrintLine();
-   }
-   else
-   {
-      ErrorMsg("Unknown pseudo op\n");
-      ErrorLine(p);
-      exit(1);
-   }
-   if (pc > 0x10000)
-   {
-      ErrorMsg("Program counter overflow\n");
-      ErrorLine(p);
-      exit(1);
-   }
-   return SkipSpace(p);
-}
-
 void ParseLine(char *cp)
 {
    int i,v,m;
+   char *start = cp;  // Remember start of line
 
    ex =  0;
    am = -1;
@@ -3146,6 +3184,7 @@ void ParseLine(char *cp)
    cp = SkipHexCode(cp);        // Skip disassembly
    cp = SkipSpace(cp);          // Skip leading blanks
    if (!strncmp(cp,"****",4)) ModuleTrigger = LiNo;
+   if (df) fprintf(df,"%5d %4.4x Parse[%d]:%s\n",LiNo,pc&0xffff,Phase,cp);
    if (CheckCondition(cp)) return;
    if (Skipping)
    {
@@ -3154,10 +3193,9 @@ void ParseLine(char *cp)
       if (df)         fprintf(df,"%5d SKIP          %s\n",LiNo,Line);
       return;
    }
-   if (pf && Phase == 2 && !InsideMacro)
+   if (pf && Phase == 2 && !MacLev)
    {
-       if (MacroStopped) MacroStopped = 0;
-       else fprintf(pf,"%s\n",Line); // write to preprocessed file
+       fprintf(pf,"%s\n",Line); // write to preprocessed file
    }
    if (strncmp(cp,"/*",2) == 0 || strncmp(cp,"\\*",2) == 0) // SDDRIVE comment style
    {
@@ -3185,9 +3223,16 @@ void ParseLine(char *cp)
       if ((MneIndex = IsInstruction(cp)) < 0)
       {
          m = ExpandMacro(cp);
-         if (m < 0)
+         if (m < 0) // not a macro
          {
-            cp = DefineLabel(cp,&v,0);
+            if (df) fprintf(df,"LABEL:%s:\n",cp);
+            if (cp == start) cp = DefineLabel(cp,&v,0);
+            else
+            {
+               if (StrKey(cp,"SET") ||
+                   StrKey(cp,"EQU") || strchr(cp,'='))
+                  cp = DefineLabel(cp,&v,0);
+            }
             if (ModuleTrigger == LiNo-1) ModuleStart = v;
             cp = SkipSpace(cp);         // Skip leading blanks
             if (*cp) m = ExpandMacro(cp);   // Macro after label
@@ -3203,11 +3248,10 @@ void ParseLine(char *cp)
          }
       }
    }
-   if (*cp == '!') cp = IsData(cp);    // BS9 enhancements
+   if (ForcedEnd)  return;
    if (*cp ==  0 ) return;             // No code
    if (*cp == ';') return;             // No code
    if (*cp == '&') cp = SetBSS(cp);    // Set BSS counter
-   if (ForcedEnd) return;
    cp = CheckPseudo(cp);        // Pseudo Ops
    if (MneIndex < 0) MneIndex = IsInstruction(cp); // Check for mnemonic after label
    if (MneIndex >= 0)
@@ -3273,13 +3317,12 @@ void Phase1(void)
    Eof = feof(sf);
    while (!Eof || IncludeLevel > 0)
    {
-      if (df) fprintf(df,"Phase 1: %4.4x %s",pc,Line);
       ++LiNo; ++TotalLiNo;
       l = strlen(Line);
       if (l && Line[l-1] == 10) Line[--l] = 0; // Remove linefeed
       if (l && Line[l-1] == 13) Line[--l] = 0; // Remove return
       ParseLine(Line);
-      if (InsideMacro)
+      if (MacLev)
       {
          NextMacLine(Line);
          if (df) fprintf(df,"Macro: %s\n",Line);
@@ -3321,7 +3364,7 @@ void Phase2(void)
       if (l && Line[l-1] == 10) Line[--l] = 0; // Remove linefeed
       if (l && Line[l-1] == 13) Line[--l] = 0; // Remove return
       ParseLine(Line);
-      if (InsideMacro) NextMacLine(Line);
+      if (MacLev) NextMacLine(Line);
       else fgets(Line,sizeof(Line),sf);
       Eof = feof(sf) || ForcedEnd;
       if (Eof && IncludeLevel > 0) Eof = CloseInclude();
@@ -3495,7 +3538,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 30-Oct-2019         *\n");
+   printf("* Bit Shift Assembler 09-Dec-2019         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
