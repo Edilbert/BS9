@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 09-Dec-2019
+Version: 11-Dec-2019
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -555,13 +555,13 @@ struct PushStruct
 
 #define UNDEF 0xffff0000
 
-int SkipHex = 0;    // Switch on with -x
-int Debug = 0;      // Switch on with -d
-int LiNo  = 0;      // Line number of current file
-int WithLiNo = 0;   // Print line numbers in listing if set
-int TotalLiNo  = 0; // Total line number
-int Preprocess = 0; // Print preprocessed source file <file.pp>
-int ERRMAX = 10;    // Stop assemby after ERRMAX errors
+int SkipHex    =  0; // Switch on with -x
+int Debug      =  0; // Switch on with -d
+int LiNo       =  0; // Line number of current file
+int WithLiNo   =  0; // Print line numbers in listing if set
+int TotalLiNo  =  0; // Total line number
+int Preprocess =  0; // Print preprocessed source file <file.pp>
+int ERRMAX     = 10; // Stop assemby after ERRMAX errors
 int ErrNum;
 int LoadAddress = UNDEF;
 int WriteLoadAddress = 0;
@@ -822,35 +822,57 @@ void ErrorMsg(const char *format, ...) {
    free(buf);
 }
 
-void PrintLiNo(int Blank)
+
+// *********
+// PrintLiNo
+// *********
+
+void PrintLiNo(void)
 {
-   if (Phase < 2) return;
-   if (WithLiNo)
-   {
-      fprintf(lf,"%5d",LiNo);
-      if (Blank ==  1) fprintf(lf," ");
-   }
-   if (Blank == -1) fprintf(lf,"\n");
+   if (WithLiNo && Phase == 2) fprintf(lf,"%5d ",LiNo);
 }
+
+
+// *******
+// PrintPC
+// *******
 
 void PrintPC(void)
 {
-   if (Phase < 2) return;
-   if (WithLiNo) PrintLiNo(1);
-   fprintf(lf,"%4.4x",pc);
+   if (Phase == 2)
+   {
+      PrintLiNo();
+      fprintf(lf,"%4.4x",pc);
+   }
 }
+
+
+// *******
+// PrintOC
+// *******
 
 void PrintOC(int v)
 {
+
+   // special format for 32 bit load
+
    if (oc == 0xcd) // LDQ immediate
    {
       fprintf(lf," cd %4.4x %4.4x",v>>16,v&0xffff);
       return;
    }
+
+   // opcode value is 16 or 8 bit
+
    if (oc > 255) fprintf(lf," %4.4x",oc);
    else          fprintf(lf,"   %2.2x",oc);
+
+   // postbyte
+
    if (pb >= 0)  fprintf(lf," %2.2x",pb);
    else          fprintf(lf,"   ");
+
+   // address or value 16 bit, 8 bit or none
 
         if (ql == 2) fprintf(lf," %4.4x",v&0xffff);
    else if (ql == 1) fprintf(lf,"   %2.2x",v&0xff);
@@ -860,7 +882,7 @@ void PrintOC(int v)
 void PrintLine(void)
 {
    if (Phase < 2) return;
-   PrintLiNo(1);
+   PrintLiNo();
    fprintf(lf,"                  %s\n",Line);
 }
 
@@ -874,7 +896,7 @@ void PrintPCLine(void)
 void PrintByteLine(int b)
 {
    if (Phase < 2) return;
-   if (WithLiNo) PrintLiNo(1);
+   PrintLiNo();
    fprintf(lf,"  %2.2x",b);
    fprintf(lf,"          %s\n",Line);
 }
@@ -882,7 +904,7 @@ void PrintByteLine(int b)
 void PrintWordLine(int w)
 {
    if (Phase < 2) return;
-   if (WithLiNo) PrintLiNo(1);
+   PrintLiNo();
    fprintf(lf,"%4.4x",w);
    fprintf(lf,"              %s\n",Line);
 }
@@ -987,7 +1009,7 @@ char *SetBSS(char *p)
    if (df) fprintf(df,"BSS = %4.4x\n",bss);
    if (Phase == 2)
    {
-      PrintLiNo(1);
+      PrintLiNo();
       fprintf(lf,"%4.4x          %s\n",bss,Line);
    }
    return p;
@@ -1855,7 +1877,7 @@ char *ParseBSSData(char *p)
    }
    if (Phase == 2)
    {
-      PrintLiNo(1);
+      PrintLiNo();
       fprintf(lf,"%4.4x             ",bss);
       fprintf(lf,"%s\n",Line);
    }
@@ -2232,7 +2254,7 @@ int CheckCondition(char *p)
       CheckSkip();
       if (Phase == 2)
       {
-         PrintLiNo(1);
+         PrintLiNo();
          if (SkipLine[IfLevel])
             fprintf(lf,"%4.4x FALSE    %s\n",SkipLine[IfLevel],Line);
          else
@@ -2245,7 +2267,7 @@ int CheckCondition(char *p)
       r = 1;
       SkipLine[IfLevel] = !SkipLine[IfLevel];
       CheckSkip();
-      PrintLiNo(1);
+      PrintLiNo();
       if (Phase == 2) fprintf(lf,"              %s\n",Line);
    }
    if (!strcmpword(p,"endif"))
@@ -2253,7 +2275,7 @@ int CheckCondition(char *p)
    if (df) fprintf(df,"inside Check endif\n");
       r = 1;
       IfLevel--;
-      PrintLiNo(1);
+      PrintLiNo();
       if (Phase == 2) fprintf(lf,"              %s\n",Line);
       if (IfLevel < 0)
       {
@@ -3073,13 +3095,13 @@ void RecordMacro(char *p)
    }
    else if (Phase == 2) // List macro
    {
-      PrintLiNo(1);
+      PrintLiNo();
       ++LiNo;
       fprintf(lf,"            %s\n",Line);
       do
       {
          fgets(Line,sizeof(Line),sf);
-         PrintLiNo(1);
+         PrintLiNo();
          ++LiNo;
          fprintf(lf,"            %s",Line);
          if (pf) fprintf(pf,"%s",Line);
@@ -3142,7 +3164,10 @@ void NextMacLine(char *w)
    char *r;
 
    if (df) fprintf(df,"Next Macro Line:%s\n",w);
-   if (!WithLiNo) --LiNo; // -n : count macro lines
+
+   // do not count macro expansion lines
+
+   --LiNo;
 
    // check for end of macro body
 
@@ -3188,7 +3213,7 @@ void ParseLine(char *cp)
    if (CheckCondition(cp)) return;
    if (Skipping)
    {
-      PrintLiNo(1);
+      PrintLiNo();
       if (Phase == 2) fprintf(lf,"SKIP          %s\n",Line);
       if (df)         fprintf(df,"%5d SKIP          %s\n",LiNo,Line);
       return;
@@ -3203,13 +3228,18 @@ void ParseLine(char *cp)
       if (Phase == 2) PrintLine();
       return;
    }
-   if (*cp == 0 || *cp == '*' || *cp == ';')  // Empty or comment only
+   if (*cp == 0)  // Empty
    {
       if (Phase == 2)
       {
-          if (*cp == ';' || *cp == '*') PrintLine();
-          else            PrintLiNo(-1);
+          PrintLiNo();
+          fputc('\n',lf);
       }
+      return;
+   }
+   if (*cp == '*' || *cp == ';')  // comment only
+   {
+      PrintLine();
       return;
    }
    cp = CheckPseudo(cp);        // Pseudo Ops
@@ -3241,7 +3271,7 @@ void ParseLine(char *cp)
          else cp += strlen(cp);         // advance to EOL
          if (m < 0 && (*cp == 0 || *cp == ';')) // no code or data
          {
-            PrintLiNo(1);
+            PrintLiNo();
             if (Phase == 2)
                fprintf(lf,"%4.4x              %s\n",v&0xffff,Line);
             return;
@@ -3292,7 +3322,7 @@ void Phase1Listing(void)
 
 int CloseInclude(void)
 {
-   PrintLiNo(1);
+   PrintLiNo();
    if (Phase == 2)
    {
       fprintf(lf,";                       closed INCLUDE file %s\n",
@@ -3538,7 +3568,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 09-Dec-2019         *\n");
+   printf("* Bit Shift Assembler 11-Dec-2019         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
