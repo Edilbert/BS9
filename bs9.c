@@ -526,9 +526,12 @@ struct MatStruct
 
 int DimOp = DIMOP_6309;
 
+// register Q is not included, it appears never as operand
+// and is only part of the mnemonic
 
 const char *RegisterNames[] =
 {
+//  6309 register            *   *                             *   *
 //  0   1   2   3   4   5    6   7   8   9    A    B   C   D   E   F
    "D","X","Y","U","S","PC","W","V","A","B","CC","DP","*","*","E","F"
 };
@@ -2300,7 +2303,7 @@ int RegisterSize(int n)
 
    if (r == 'A' || r == 'B' || r == 'C' || r == 'E' || r == 'F') return 1;
    if (r == 'D' || r == 'X' || r == 'Y' || r == 'W') return 2;
-   if (r == 'S' || r == 'U'            ) return 2;
+   if (r == 'S' || r == 'U') return 2;
    if (r == 'Q') return 4;
 
    ErrorMsg("Illegal register name [%c]",r);
@@ -2350,23 +2353,28 @@ char *TFMRegister(char *p, int *v)
 }
 
 
-void OperandError(void)
+void OperandError(char *p)
 {
    ++ErrNum;
+   ErrorLine(p);
    ErrorMsg("Syntax error in operand\n");
    exit(1);
 }
 
 
-int PostIndexReg(int reg,char c)
+int PostIndexReg(int reg,char *p)
 {
-   switch(c)
+   switch(*p)
    {
-      case 'X': if (reg < 0) reg = 0x00; else OperandError(); break;
-      case 'Y': if (reg < 0) reg = 0x20; else OperandError(); break;
-      case 'U': if (reg < 0) reg = 0x40; else OperandError(); break;
-      case 'S': if (reg < 0) reg = 0x60; else OperandError(); break;
-      default : OperandError();
+      case 'x':
+      case 'X': if (reg < 0) reg = 0x00; else OperandError(p); break;
+      case 'y':
+      case 'Y': if (reg < 0) reg = 0x20; else OperandError(p); break;
+      case 'u':
+      case 'U': if (reg < 0) reg = 0x40; else OperandError(p); break;
+      case 's':
+      case 'S': if (reg < 0) reg = 0x60; else OperandError(p); break;
+      default : OperandError(p);
    }
    return reg;
 }
@@ -2399,7 +2407,7 @@ int SetPostByte(char *p, int *v)
 
    if (p[0] == 'A' && p[1] == ',')
    {
-      reg = PostIndexReg(reg,p[2]);
+      reg = PostIndexReg(reg,p+2);
       ql = 0;
       return (0x80 | reg | ind | 0x06);
    }
@@ -2408,7 +2416,7 @@ int SetPostByte(char *p, int *v)
 
    if (p[0] == 'B' && p[1] == ',')
    {
-      reg = PostIndexReg(reg,p[2]);
+      reg = PostIndexReg(reg,p+2);
       ql = 0;
       return (0x80 | reg | ind | 0x05);
    }
@@ -2417,7 +2425,7 @@ int SetPostByte(char *p, int *v)
 
    if (p[0] == 'D' && p[1] == ',')
    {
-      reg = PostIndexReg(reg,p[2]);
+      reg = PostIndexReg(reg,p+2);
       ql = 0;
       return (0x80 | reg | ind | 0x0b);
    }
@@ -2426,7 +2434,7 @@ int SetPostByte(char *p, int *v)
 
    if (p[0] == 'E' && p[1] == ',')
    {
-      reg = PostIndexReg(reg,p[2]);
+      reg = PostIndexReg(reg,p+2);
       ql = 0;
       return (0x80 | reg | ind | 0x07);
    }
@@ -2435,7 +2443,7 @@ int SetPostByte(char *p, int *v)
 
    if (p[0] == 'F' && p[1] == ',')
    {
-      reg = PostIndexReg(reg,p[2]);
+      reg = PostIndexReg(reg,p+2);
       ql = 0;
       return (0x80 | reg | ind | 0x0a);
    }
@@ -2477,16 +2485,16 @@ int SetPostByte(char *p, int *v)
       {
          switch (*p)
          {
-            case '+': ++inc; if (reg <  0) OperandError(); break;
-            case '-': ++dec; if (reg >= 0) OperandError(); break;
-            default : reg = PostIndexReg(reg,*p);
+            case '+': ++inc; if (reg <  0) OperandError(p); break;
+            case '-': ++dec; if (reg >= 0) OperandError(p); break;
+            default : reg = PostIndexReg(reg,p);
          }
               if (inc == 1 && dec == 0) amo = 0x00;
          else if (inc == 2 && dec == 0) amo = 0x01;
          else if (inc == 0 && dec == 1) amo = 0x02;
          else if (inc == 0 && dec == 2) amo = 0x03;
          else if (inc == 0 && dec == 0) amo = 0x04;
-         else OperandError();
+         else OperandError(p);
       }
       ql = 0; // no address
       return (0x80 | reg | amo);
@@ -2497,7 +2505,7 @@ int SetPostByte(char *p, int *v)
    if (*p == ',')
    {
       *v = off;
-      reg = PostIndexReg(reg,*(++p));
+      reg = PostIndexReg(reg,++p);
       if (off >= -16 && off < 16 && ind == 0) // 5 bit offset
       {
          ql = 0; // no following bytes
@@ -2520,7 +2528,7 @@ int SetPostByte(char *p, int *v)
    // auto increment
    // auto decrement
 
-   OperandError();
+   OperandError(p);
    return -1;
 }
 
@@ -2539,10 +2547,10 @@ int ScanPushList(char *p)
          l = strlen(Reg);
          if (!strcmpword(p,Reg)) break;
       }
-      if (i < 0) OperandError();
+      if (i < 0) OperandError(p);
       v |= PushList[i].Val;
       p += l;
-      if (*p != ',' && *p != 0) OperandError();
+      if (*p != ',' && *p != 0) OperandError(p);
       if (*p == ',') ++p;
    }
    return v;
