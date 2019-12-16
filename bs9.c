@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 11-Dec-2019
+Version: 16-Dec-2019
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -585,14 +585,15 @@ int ol;      // opcode length
 int pl;      // postbyte length
 int ql;      // operand length
 int pc = -1; // program counter
-int ex;      // force extended mode
 int bss;     // bss counter
+int nops;    // snychronisation nops
 int Phase;
 int IfLevel;
 int Skipping;
 int SkipLine[10];
 int ForcedEnd;    // Triggered by END command
 int IgnoreCase;   // 1: Ignore case for symbols
+int ForcedMode;   // -1: direct page, +1: extended
 
 // Filenames
 
@@ -620,12 +621,19 @@ int StoreCount = 0;
 
 unsigned char ROM[0x10100]; // binary
 
+// A two pass assembler must set the address length in phase 1
+// These are stored in ADL, in order to avoid phase errors
+//  0: no code generated for this address
+// >0: instruction length locked
+// <0: data byte or not start byte of instruction
 
-FILE *sf;
-FILE *lf;
-FILE *df;
-FILE *pf;
-FILE *of;
+signed char ADL[0x10000];
+
+FILE *sf; // source       file
+FILE *lf; // listing      file
+FILE *df; // debug        file
+FILE *pf; // preprocessed file
+FILE *of; // object       file
 
 struct IncludeStackStruct
 {
@@ -667,6 +675,7 @@ struct LabelStruct
 int Labels;
 
 #define MAXMAC 64
+#define CHAMAC '`'
 
 struct MacroStruct
 {
@@ -751,13 +760,13 @@ char *NextSymbol(char *p, char *s)
 }
 
 // Check if string s2 is a word in s1
-// and search string is followed by a white space
+// and search string is followed by a white space or symbol
 
 int strcmpword(const char *s1, const char *s2)
 {
    int l = strlen(s2);
    int r = strncasecmp(s1,s2,l);
-   if (r == 0 && s1[l] && !isspace(s1[l])) r = 1;
+   if (r == 0 && isym(s1[l])) r = 1;
    return r;
 }
 
@@ -877,8 +886,11 @@ void PrintOC(int v)
 
    // address or value 16 bit, 8 bit or none
 
-        if (ql == 2) fprintf(lf," %4.4x",v&0xffff);
-   else if (ql == 1) fprintf(lf,"   %2.2x",v&0xff);
+        if (nops == 2 && ql == 0) fprintf(lf," 1212");
+   else if (nops == 1 && ql == 0) fprintf(lf," 12  ");
+   else if (nops == 1 && ql == 1) fprintf(lf," %2.2x12",v&0xff);
+   else if (  ql == 2) fprintf(lf," %4.4x",v&0xffff);
+   else if (  ql == 1) fprintf(lf,"   %2.2x",v&0xff);
    else              fprintf(lf,"     ");
 }
 
@@ -1071,13 +1083,24 @@ void ExtractOpText(char *p)
 {
    int l,inquo,inapo;
 
-   l       =       0; // length of trimmed operand
-   inquo   =       0; // inside quotes
-   inapo   =       0; // inside apostrophes
+   l          = 0; // length of trimmed operand
+   inquo      = 0; // inside quotes
+   inapo      = 0; // inside apostrophes
+   ForcedMode = 0; // forced direct page (-1) or extended (+1)
 
    OpText[0] = 0;     // empty operand
    p = SkipSpace(p);  // text after mnemonic or pseudo op
    if (!*p) return;   // end of line
+   if (*p == '<')
+   {
+      ForcedMode = -1;
+      ++p;
+   }
+   else if (*p == '>')
+   {
+      ForcedMode =  1;
+      ++p;
+   }
 
    // Extract operand
 
@@ -1487,7 +1510,7 @@ char *op_lno(char *p, int *v) { p = EvalOperand(p+1,v,12);*v = !(*v)    ; return
 char *op_bno(char *p, int *v) { p = EvalOperand(p+1,v,12);*v = ~(*v)    ; return p; }
 
 char *op_low(char *p, int *v) { p = EvalOperand(p+1,v,12);*v &= 0xff    ; return p; }
-char *op_hig(char *p, int *v) { p = EvalOperand(p+1,v,12);ex = 1        ; return p; }
+char *op_hig(char *p, int *v) { p = EvalOperand(p+1,v,12);*v >>= 8;     ; return p; }
 
 char *op_prc(char *p, int *v) { *v = pc; return p+1;}
 char *op_hex(char *p, int *v) { return EvalHexValue(p+1,v) ;}
@@ -2117,6 +2140,19 @@ char *ps_end(char *p)    { PrintLine(); ForcedEnd = 1; return p; }
 char *ps_ignore(char *p) { PrintLine(); return p; }
 char *ps_formln(char *p) { FormLn = atoi(p); PrintByteLine(FormLn); return p; }
 
+char *ps_align(char *p)
+{
+   int a;
+   ExtractOpText(p);
+   EvalOperand(OpText,&a,0);
+   if (a > 0 && a <= 0x1000)
+   {
+      pc += (a - pc % a) % a;
+   }
+   PrintPCLine();
+   return p;
+}
+
 char *ps_org(char *p)
 {
    ExtractOpText(p);
@@ -2139,6 +2175,7 @@ char *ps_setdp(char *p)
 {
    ExtractOpText(p);
    EvalOperand(OpText,&DP,0);
+   if (DP > 255) DP >>= 8;      // alternate DP assignment
    PrintByteLine(DP);
    return p;
 }
@@ -2151,6 +2188,7 @@ struct PseudoStruct
 
 struct PseudoStruct PseudoTab[] =
 {
+   {"ALIGN"  , &ps_align  },
    {"BITS"   , &ps_bits   },
    {"BSS"    , &ps_bss    },
    {"BYTE"   , &ps_byte   },
@@ -2201,8 +2239,45 @@ char *CheckPseudo(char *p)
 }
 
 
-void AdjustOpcode(char *p)
+void SetInstructionLength(char *p)
 {
+   int i;
+
+   // Store opcode
+
+   if (oc >= 0)
+   {
+      if (oc < 256)  ROM[pc] = oc;
+      else
+      {
+         ROM[pc  ] = oc >> 8;
+         ROM[pc+1] = oc & 0xff;
+      }
+   }
+
+   // Lock instruction length
+
+   if (pc >= 0 && pc < 0x10000)
+   {
+      if (ADL[pc] != 0 && ADL[pc] != il)
+      {
+         ErrorMsg("Phase error\n");
+         ErrorLine(p);
+         exit(1);
+      }
+      ADL[pc] = il;
+      for (i=1 ; i < il ; ++i) ADL[pc+i] = -1;
+   }
+   if (df) fprintf(df,"oc = %4.2x il = %d\n",oc,il);
+}
+
+
+void Synchronize(char *p)
+{
+   nops = ADL[pc] - il;
+   if (df) fprintf(df,"oc = %4.2x ol=%d ql=%d il=%d\n",oc,ol,ql,il);
+   if (df && nops) fprintf(df,"Add %d NOP's\n",nops);
+   il = ADL[pc];
 }
 
 
@@ -2394,18 +2469,23 @@ int SetPostByte(char *p, int *v)
 
    // indirect
 
+   if (df) fprintf(df,"indirect check %c %c\n",p[0],p[opl-1]);
    if (p[0] == '[' && p[opl-1] == ']')
    {
       ind = 0x10;
       p[opl-1] = 0;
-      --opl;
+      opl-=2;
       ++p;
+      if (df) fprintf(df,"is indirect <%s>\n",p);
    }
    if ((ind = 0x10 * (*p == '['))) ++p;
 
+
+   if (df) fprintf(df,"Check R,R: %c%c%c\n",toupper(p[0]),p[1],toupper(p[2]));
+
    // A,R
 
-   if (p[0] == 'A' && p[1] == ',')
+   if (toupper(p[0]) == 'A' && p[1] == ',')
    {
       reg = PostIndexReg(reg,p+2);
       ql = 0;
@@ -2414,7 +2494,7 @@ int SetPostByte(char *p, int *v)
 
    // B,R
 
-   if (p[0] == 'B' && p[1] == ',')
+   if (toupper(p[0]) == 'B' && p[1] == ',')
    {
       reg = PostIndexReg(reg,p+2);
       ql = 0;
@@ -2423,7 +2503,7 @@ int SetPostByte(char *p, int *v)
 
    // D,R
 
-   if (p[0] == 'D' && p[1] == ',')
+   if (toupper(p[0]) == 'D' && p[1] == ',')
    {
       reg = PostIndexReg(reg,p+2);
       ql = 0;
@@ -2432,7 +2512,7 @@ int SetPostByte(char *p, int *v)
 
    // E,R
 
-   if (p[0] == 'E' && p[1] == ',')
+   if (toupper(p[0]) == 'E' && p[1] == ',')
    {
       reg = PostIndexReg(reg,p+2);
       ql = 0;
@@ -2441,7 +2521,7 @@ int SetPostByte(char *p, int *v)
 
    // F,R
 
-   if (p[0] == 'F' && p[1] == ',')
+   if (toupper(p[0]) == 'F' && p[1] == ',')
    {
       reg = PostIndexReg(reg,p+2);
       ql = 0;
@@ -2450,12 +2530,14 @@ int SetPostByte(char *p, int *v)
 
    // PC relative
 
-   if ((opl > 4 && strcmp(p+opl-4,",PCR") == 0) ||
-       (opl > 3 && strcmp(p+opl-3,",PC" ) == 0))
+   if (df) fprintf(df,"check PC relative %d [%s],<%s>\n",opl,p,p+opl-3);
+   if ((opl > 4 && strncasecmp(p+opl-4,",PCR",4) == 0) ||
+       (opl > 3 && strncasecmp(p+opl-3,",PC" ,3) == 0))
    {
+      if (df) fprintf(df,"check PC relative %s\n",p);
       p = EvalOperand(p,&off,0);
       off -= pc+3;
-      if (off >= -128 && off < 128 && ROM[pc] != 0x8d)
+      if (ForcedMode < 0 || (off >= -128 && off < 128 && ROM[pc] != 0x8d))
       {
          ql = 1;
          *v = off;
@@ -2504,14 +2586,15 @@ int SetPostByte(char *p, int *v)
 
    if (*p == ',')
    {
+      if (df) fprintf(df,"constant off = %x\n",off);
       *v = off;
-      reg = PostIndexReg(reg,++p);
-      if (off >= -16 && off < 16 && ind == 0) // 5 bit offset
+      reg = PostIndexReg(reg,++p);               // 5 bit offset
+      if (ForcedMode <= 0 && off >= -16 && off < 16 && ind == 0)
       {
          ql = 0; // no following bytes
          return (reg | (off & 0x1f));
-      }
-      else if (off >= -128 && off < 128)     // 8 bit offset
+      }                                      // 8 bit offset
+      else if (ForcedMode <  0 || (off >= -128 && off < 128))
       {
          ql = 1; // one following byte
          return (0x80 | reg | ind | 0x08);
@@ -2523,11 +2606,6 @@ int SetPostByte(char *p, int *v)
       }
    }
 
-
-   // accumulator offset
-   // auto increment
-   // auto decrement
-
    OperandError(p);
    return -1;
 }
@@ -2538,6 +2616,7 @@ int ScanPushList(char *p)
    int i,l,v;
    char *Reg;
 
+   if (!strcmpword(p,"ALL")) return 0xff;
    v = 0;
    while (*p && *p != ' ')
    {
@@ -2545,6 +2624,7 @@ int ScanPushList(char *p)
       {
          Reg = PushList[i].Reg;
          l = strlen(Reg);
+   if (df) fprintf(df,"push list [%s] <%s>\n",p,Reg);
          if (!strcmpword(p,Reg)) break;
       }
       if (i < 0) OperandError(p);
@@ -2560,7 +2640,7 @@ int ScanPushList(char *p)
 char *GenerateCode(char *p)
 {
    int ibi = 0; // instruction byte index
-   int l,v,rd;
+   int i,l,v,rd;
    int r1,r2,qc,XIM;
    char *q;
    char p1,p2;  // post increment
@@ -2762,8 +2842,7 @@ char *GenerateCode(char *p)
    else if (OpText[0] == '[')
    {
       l = strlen(OpText);
-      if (OpText[l-1] == ']') OpText[l-1] = 0;
-      else
+      if (OpText[l-1] != ']')
       {
          ErrorLine(p);
          ErrorMsg("Missing closing bracket ]\n");
@@ -2815,27 +2894,45 @@ char *GenerateCode(char *p)
    {
       p = EvalOperand(p,&v,0);
 
-      // extended address mode
-
-      if (XIM) oc = XIM;
-      else     oc = Mat[MneIndex].Opc[AM_Extended];
-      if (oc >= 0)
+      if (Phase == 2) // opcode and instruction length is set in phase 1
       {
-         ol = 1 + (oc > 255); // opcode length
-         ql = 2;
-         il = ol + 2;
+         oc = ROM[pc];
+         ol = 1 + (oc == 0x10 || oc == 0x11);
+         if (ol == 2) oc = (oc << 8) | ROM[pc+1];
+         il = ADL[pc];
+         ql = il - ol;
+         if (ForcedMode < 1) v &= 0xff;
+      }
+      else
+      {
+         // extended address mode
 
-         // direct address mode
-
-         if (XIM) qc = oc & 0xfff;
-         else     qc = Mat[MneIndex].Opc[AM_Direct];
-         if (*p == '<' ||
-            (ex == 0 && *p != '>' && qc >= 0 && v != UNDEF && (v >> 8) == DP))
+         if (XIM) oc = XIM;
+         else     oc = Mat[MneIndex].Opc[AM_Extended];
+         if (oc >= 0)
          {
-            oc = qc;
-            v &= 0xff;
-            ql = 1;
-            il = ol + 1;
+            // assume extended mode
+
+            ol = 1 + (oc > 255); // opcode  length
+            ql = 2;              // operand length
+            il = ol + 2;         // instruction length
+
+            // direct address mode
+
+            if (ForcedMode <= 0) // not forced extended
+            {
+               if (XIM) qc = oc & 0xfff;
+               else     qc = Mat[MneIndex].Opc[AM_Direct];
+
+               if (qc >= 0 && (ForcedMode < 0 ||
+                  (v != UNDEF && (v >> 8) == DP)))
+               {
+                  oc = qc;
+                  v &= 0xff;
+                  ql = 1;
+                  il = ol + 1;
+               }
+            }
          }
       }
 
@@ -2858,7 +2955,8 @@ char *GenerateCode(char *p)
       }
    }
 
-   AdjustOpcode(p);
+   if (Phase == 1) SetInstructionLength(p);
+   if (Phase == 2) Synchronize(p);
 
    if (Phase == 2)
    {
@@ -2893,23 +2991,28 @@ char *GenerateCode(char *p)
          ROM[pc+ibi++] = v >> 24;
          ROM[pc+ibi++] = v >> 16;
          ROM[pc+ibi++] = v >>  8;
-         ROM[pc+ibi  ] = v;
+         ROM[pc+ibi++] = v;
       }
 
       if (ql == 2) // 16 bit value
       {
          ROM[pc+ibi++] = v >> 8;
-         ROM[pc+ibi  ] = v;
+         ROM[pc+ibi++] = v;
       }
 
       if (ql == 1) //  8 bit value
       {
-         ROM[pc+ibi  ] = v;
+         ROM[pc+ibi++] = v;
       }
+
+      for (i=0 ; i < nops ; ++i) ROM[ibi++] = 0x12; // NOP
 
       PrintPC();
       PrintOC(v);
       fprintf(lf," %s",Line);
+      if (nops && df) fprintf(df,"Added %d NOP's\n",nops);
+      if (nops >  1 && lf) fprintf(lf," ; added %d NOP's",nops);
+      if (nops == 1 && lf) fprintf(lf," ; added a NOP");
    }
 
    if (il < 1 || il > 5)
@@ -2974,11 +3077,13 @@ int ScanArgs(char *p, char *args, int ptr[])
 
    n = 0;
    ptr[0] = 0;
+   // if (df) fprintf(df,"Inside ScanArgs: <%s>\n",p);
    while (*p && n < 10)
    {
       p = SkipSpace(p);
-      if (strcmpword(p,"ARG")) break; // end of list
+      if (*p == ';') break; // comment
       p = NextSymbol(p,sym);
+      // if (df) fprintf(df,"ScanSym:<%s>\n",sym);
       l = strlen(sym);
       if (l) strcpy(args+ptr[n],sym);
       else   args[ptr[n]] = 0;
@@ -2991,6 +3096,16 @@ int ScanArgs(char *p, char *args, int ptr[])
    return n;
 }
 
+void MacroInfo(int n)
+{
+   fprintf(df,"-----------------\n");
+   fprintf(df,"Name: %s\n",Mac[n].Name);
+   fprintf(df,"Args: %d\n",Mac[n].Narg);
+   fprintf(df,"Cola: %d\n",Mac[n].Cola);
+   fprintf(df,"Type: %d\n",Mac[n].Type);
+   fprintf(df,"Body: <<<%s>>>\n",Mac[n].Body);
+   fprintf(df,"-----------------\n");
+}
 
 void RecordMacro(char *p)
 {
@@ -3010,8 +3125,9 @@ void RecordMacro(char *p)
    }
 
    bl = 1;
-   mf = strcmpword(p,"MACRO"); // 1 : name MACRO
-   if (!mf) p += 5;            // 0 : MACRO name
+   mf = strcmpword(p,"MACRO") != 0; // 1 : name MACRO
+   if (!mf) p += 5;                 // 0 : MACRO name
+   if (df) fprintf(df,"macro type = %d\n",mf);
 
    p = NextSymbol(p,Macro);
    l = strlen(Macro);
@@ -3067,7 +3183,7 @@ void RecordMacro(char *p)
                al = strlen(at);
                if (al && !StrnCmp(p,at,al))
                {
-                  *b++ = '&';
+                  *b++ = CHAMAC;
                   *b++ = '0' + i;
                   p += al;
                   break;
@@ -3122,7 +3238,7 @@ void RecordMacro(char *p)
       ErrorMsg("Duplicate macro [%s]\n",Macro);
       exit(1);
    }
-   if (df) fprintf(df,"Macro [%s] = %s\n",Mac[j].Name,Mac[j].Body);
+   if (df) MacroInfo(j);
    ++LiNo;
 }
 
@@ -3188,7 +3304,7 @@ void NextMacLine(char *w)
       while (*MacPtr[MacLev] &&
              *MacPtr[MacLev] != '\n')
       {
-         if (*MacPtr[MacLev] == '&')
+         if (*MacPtr[MacLev] == CHAMAC)
          {
             i = *(++MacPtr[MacLev]) - '0';
             r = MacArgs + ArgPtr[i];
@@ -3208,7 +3324,6 @@ void ParseLine(char *cp)
    int i,v,m;
    char *start = cp;  // Remember start of line
 
-   ex =  0;
    am = -1;
    oc = -1;
    Label[0] = 0;
@@ -3406,8 +3521,6 @@ void Phase2(void)
       else fgets(Line,sizeof(Line),sf);
       Eof = feof(sf) || ForcedEnd;
       if (Eof && IncludeLevel > 0) Eof = CloseInclude();
-      if (df) fprintf(df,"Phase 2:[%s] EOF=%d\n",Line,Eof);
-      if (Eof && IncludeLevel > 0) Eof = CloseInclude();
       if (GenEnd < pc) GenEnd = pc; // Remember highest assenble address
       if (ErrNum >= ERRMAX)
       {
@@ -3576,7 +3689,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 11-Dec-2019         *\n");
+   printf("* Bit Shift Assembler 16-Dec-2019         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
