@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 16-Dec-2019
+Version: 18-Dec-2019
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -1662,9 +1662,6 @@ char *EvalOperand(char *p, int *v, int prio)
 
    if (*p && strchr("[!~$'%?",*p))
    {
-      ErrorMsg("Syntax error: need binary operator or end of expression\n");
-      ErrorLine(p);
-      exit(1);
    }
 
    while (*p && strchr("*/+-<>=!&^|",*p))
@@ -1688,6 +1685,12 @@ char *EvalOperand(char *p, int *v, int prio)
             else r = binop[i].foo(r,w);
             break;
          }
+      }
+      if (i == BINOPS)  // no valid operator
+      {
+         ErrorMsg("Syntax error: binary operator expected\n");
+         ErrorLine(p);
+         exit(1);
       }
    }
    *v = r;
@@ -3689,7 +3692,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 16-Dec-2019         *\n");
+   printf("* Bit Shift Assembler 18-Dec-2019         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
