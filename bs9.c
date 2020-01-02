@@ -2904,7 +2904,7 @@ char *GenerateCode(char *p)
          if (ol == 2) oc = (oc << 8) | ROM[pc+1];
          il = ADL[pc];
          ql = il - ol;
-         if (ForcedMode < 1) v &= 0xff;
+         if (ForcedMode < 0) v &= 0xff;
       }
       else
       {
@@ -2999,6 +2999,7 @@ char *GenerateCode(char *p)
 
       if (ql == 2) // 16 bit value
       {
+   if (df) fprintf(df,"Insert %2.2x %2.2x\n",v>>8,v&255);
          ROM[pc+ibi++] = v >> 8;
          ROM[pc+ibi++] = v;
       }
