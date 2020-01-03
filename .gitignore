@@ -1,0 +1,15 @@
+# Ignore executables
+bs9
+bs9.exe
+
+# Ignore Debug output
+Debug.lst
+
+# Ignore QtCreator files
+bs9.cflags
+bs9.config
+bs9.creator
+bs9.creator.user
+bs9.cxxflags
+bs9.files
+bs9.includes
