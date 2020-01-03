@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 18-Dec-2019
+Version: 03-Jan-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -71,6 +71,9 @@ Examples of pseudo opcodes (directives):
 ========================================
 ORG  $E000                     set program counter
 STORE BASIC_ROM,$2000,"basic.rom" write binary image file "basic.rom"
+STORE BASIC_ROM,$2000,"basic.rom",bin,1 write binary image, headed by load address
+STORE BASIC_ROM,$2000,"basic.s19",s19 write binary file in Motorola S-Record format
+STORE BASIC_ROM,$2000,"basic.s19",s19,Main write binary and provide execution start address
 BITS . . * . * . . .           stores a byte from 8 bit symbols
 BYTE $20,"Example",0           stores a series of byte data
 WORD LAB_10, WriteTape,$0200   stores a series of word data
@@ -219,6 +222,7 @@ forum64 or the forum of the VzEkC.
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
+
 
 char *Strcasestr(const char *s1, const char *s2)
 {
@@ -566,8 +570,6 @@ int TotalLiNo  =  0; // Total line number
 int Preprocess =  0; // Print preprocessed source file <file.pp>
 int ERRMAX     = 10; // Stop assemby after ERRMAX errors
 int ErrNum;
-int LoadAddress = UNDEF;
-int WriteLoadAddress = 0;
 int MacLev;
 int ModuleStart;       // address of a module
 int ModuleTrigger;     // start of module
@@ -608,12 +610,16 @@ int GenEnd   =       0 ; //Highest assemble address
 // These arrays hold the parameter for storage files
 
 #define SFMAX 20
-int SFA[SFMAX];
-int SFL[SFMAX];
-char SFF[SFMAX][80];
+int SFA[SFMAX];         // start address of data block
+int SFL[SFMAX];         // length of data block
+char *SFF[SFMAX];       // filename
+int SFE[SFMAX];         // execution start address
+int SFR[SFMAX];         // number of records in a S19 file
+int SFT[SFMAX];         // file format
 
 int StoreCount = 0;
 
+enum OutfileFormat { BINARY, SRECORD };
 
 // The size is one page more than 64K because program, counter
 // overflows are detected after using the new value.
@@ -1005,7 +1011,6 @@ char *SetPC(char *p)
    }
    else p += 3; // .ORG syntax
    p = EvalOperand(p+1,&pc,0);
-   if (LoadAddress < 0) LoadAddress = pc;
    PrintPCLine();
    if (GenStart > pc) GenStart = pc; // remember lowest pc value
    return p;
@@ -1840,8 +1845,8 @@ char *IncludeFile(char *p)
 
 char *ParseStoreData(char *p)
 {
-   int Start,Length,i;
-   char Filename[80];
+   int Start,Length,FileFormat,Entry;
+   char *Filename,*EndPtr;
 
    if (Phase < 2) return p + strlen(p);
    p = EvalOperand(p,&Start,0);
@@ -1874,14 +1879,41 @@ char *ParseStoreData(char *p)
       ErrorMsg("Missing quote for filename\n");
       exit(1);
    }
-   ++p;
-   i = 0;
-   while (*p && *p != '"' && i < 80) Filename[i++] = *p++;
-   Filename[i] = 0;
+   EndPtr = ++p;
+   while (*EndPtr != '\0' && *EndPtr != '"') ++EndPtr;
+   Filename = AssertAlloc(strndup(p, EndPtr - p));
+   FileFormat = BINARY;
+   Entry = -1;
+   p = NeedChar(EndPtr,',');
+   if (p)
+   {
+      ++p;
+           if (StrMatch(p, "BIN"))  FileFormat = BINARY;
+      else if (StrMatch(p, "SREC")) FileFormat = SRECORD;
+      else if (StrMatch(p, "S19"))  FileFormat = SRECORD;
+      else
+      {
+         ErrorMsg("Unknown output file format\n");
+         exit(1);
+      }
+      p = NeedChar(p,',');
+      if (p)
+      {
+         p = EvalOperand(p+1,&Entry,0);
+         if (Entry < 0 || Entry > 0xffff)
+         {
+            ErrorMsg("Illegal execution start address for STORE %d\n",Entry);
+            exit(1);
+         }
+      } else p = EndPtr;
+   } else p = EndPtr;
+
    SFA[StoreCount] = Start;
    SFL[StoreCount] = Length;
-   strcpy(SFF[StoreCount],Filename);
-   if (df) fprintf(df,"Storing %4.4x - %4.4x <%s>\n",Start,Start+Length-1,Filename);
+   SFE[StoreCount] = Entry;
+   SFF[StoreCount] = Filename;
+   SFT[StoreCount] = FileFormat;
+   if (df) fprintf(df,"Storing %4.4x - %4.4x <%s>, %s format\n",Start,Start+Length-1,Filename,FileFormat ? "S19" : "binary");
    if (StoreCount < SFMAX) ++StoreCount;
    else
    {
@@ -3604,26 +3636,90 @@ int CmpRefs( const void *arg1, const void *arg2 )
    return -1;
 }
 
+void WriteBinaryFormat(int i)
+{
+    unsigned char lo,hi;
+    FILE *bf;
+
+    if (df) fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
+                    SFA[i],SFA[i]+SFL[i],SFF[i]);
+    bf = fopen(SFF[i],"wb");
+    if (SFE[i] > -1)
+    {
+       lo = SFA[i] & 0xff;
+       hi = SFA[i]  >>  8;
+       fwrite(&hi,1,1,bf);
+       fwrite(&lo,1,1,bf);
+    }
+    fwrite(ROM+SFA[i],1,SFL[i],bf);
+    fclose(bf);
+}
+
+void WriteS19Line(FILE *bf, char *RecordType, int PayloadSize, int Address, unsigned char *Data)
+{
+   int i,Checksum;
+
+   fprintf(bf, "%s", RecordType);
+   // 3 extra bytes for address and checksum
+   Checksum = PayloadSize + 3 + (Address & 0xff) + (Address >> 8);
+   fprintf(bf, "%02X%04X", PayloadSize + 3, Address);
+   for (i=0; i < PayloadSize; ++i)
+   {
+      fprintf(bf, "%02X", Data[i]);
+      Checksum += Data[i];
+   }
+   // Force CR LF line endings for ancient EPROM programmers
+   fprintf(bf, "%02X\r\n", ~Checksum & 0xff);
+}
+
+void WriteS19Format(int i)
+{
+    unsigned char buf[80];
+    FILE *bf;
+    char *filename, *ExtPtr;
+    int UnwrittenBytes,Addr,BytesInThisLine;
+
+    filename = MallocOrDie(strlen(SFF[i] + 4 + 1));
+    strcpy(filename, SFF[i]);
+    ExtPtr = strrchr(filename, '.');
+    if (!ExtPtr) ExtPtr = filename + strlen(filename);
+    strcpy(ExtPtr, ".S19");
+    if (df) fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
+                    SFA[i],SFA[i]+SFL[i],filename);
+    bf = fopen(filename, "wb");
+    free(filename);
+
+    // Write a S0 header which the TTL pseudo op should define
+    strcpy(buf, "Bit Shift Assembler");
+    WriteS19Line(bf, "S0", strlen(buf), 0, buf);
+
+    SFR[i] = 0;
+    UnwrittenBytes = SFL[i];
+    Addr = SFA[i];
+    BytesInThisLine = 32;
+    if (UnwrittenBytes < 32) BytesInThisLine = UnwrittenBytes;
+    while (UnwrittenBytes > 0)
+    {
+       WriteS19Line(bf, "S1", BytesInThisLine, Addr, &ROM[Addr]);
+       ++SFR[i];
+       Addr += BytesInThisLine;
+       UnwrittenBytes -= BytesInThisLine;
+    }
+
+    WriteS19Line(bf, "S5", 0, SFR[i], NULL);
+
+    if (SFE[i] > -1) WriteS19Line(bf, "S9", 0, SFE[i], NULL);
+    fclose(bf);
+}
+
 void WriteBinaries(void)
 {
    int i;
-   unsigned char lo,hi;
-   FILE *bf;
 
    for (i=0 ; i < StoreCount ; ++i)
    {
-      if (df) fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
-                      SFA[i],SFA[i]+SFL[i],SFF[i]);
-      bf = fopen(SFF[i],"wb");
-      if (WriteLoadAddress)
-      {
-         lo = SFA[i] & 0xff;
-         hi = SFA[i]  >>  8;
-         fwrite(&lo,1,1,bf);
-         fwrite(&hi,1,1,bf);
-      }
-      fwrite(ROM+SFA[i],1,SFL[i],bf);
-      fclose(bf);
+      if (SFT[i] == SRECORD) WriteS19Format(i);
+      else                   WriteBinaryFormat(i);
    }
 }
 
@@ -3693,7 +3789,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 18-Dec-2019         *\n");
+   printf("* Bit Shift Assembler 03-Jan-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
