@@ -953,33 +953,6 @@ char *NeedChar(char *p, char c)
 }
 
 
-char *EvalAddress(char *p, int *a)
-{
-   p=SkipSpace(p);
-   if (*p == '$')
-   {
-      sscanf(++p,"%x",a);
-      while (isxdigit(*p)) ++p;
-      p = SkipSpace(p);
-   }
-   else
-   {
-      sscanf(p,"%x",a);
-      while (isxdigit(*p)) ++p;
-      if (*p == 'H' || *p == 'h') ++p;
-      else
-      {
-         ErrorMsg("Address %5.5s is neither $xxxx nor xxxxH\n",p);
-         exit(1);
-      }
-   }
-   if (*a < 0 || *a > 0xffff)
-   {
-      ErrorMsg("Address %x out of range\n",*a);
-   }
-   return p;
-}
-
 char *EvalOperand(char *, int *, int);
 
 char *ParseCaseData(char *p)
@@ -3690,8 +3663,8 @@ void WriteS19Format(int i)
     free(filename);
 
     // Write a S0 header which the TTL pseudo op should define
-    strcpy(buf, "Bit Shift Assembler");
-    WriteS19Line(bf, "S0", strlen(buf), 0, buf);
+    strcpy((char *)buf,"Bit Shift Assembler");
+    WriteS19Line(bf, "S0", strlen((char *)buf), 0, buf);
 
     SFR[i] = 0;
     UnwrittenBytes = SFL[i];
