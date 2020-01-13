@@ -222,6 +222,7 @@ forum64 or the forum of the VzEkC.
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
+#include <errno.h>
 
 
 char *Strcasestr(const char *s1, const char *s2)
@@ -3747,6 +3748,7 @@ const char *Stat(int o)
 int main(int argc, char *argv[])
 {
    int ic,v;
+   char *EndPtr;
 
    for (ic=1 ; ic < argc ; ++ic)
    {
@@ -3758,7 +3760,18 @@ int main(int argc, char *argv[])
       else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,1);
       else if (!strncmp(argv[ic],"-l",2))
       {
-         Preset = atoi(argv[++ic]);
+         if (++ic == argc)
+         {
+            fprintf(stderr, "Missing value for -l\n");
+            exit(1);
+         }
+         errno = 0;
+         Preset = strtol(argv[ic], &EndPtr,0);
+         if (errno != 0 || *EndPtr != '\0' || Preset < 0 || Preset > 0xff)
+         {
+            fprintf(stderr, "Illegal value '%s' for -l\n",argv[ic]);
+            exit(1);
+         }
          memset(ROM,Preset,sizeof(ROM));
       }
       else if (argv[ic][0] >= '0' || argv[ic][0] == '.')
