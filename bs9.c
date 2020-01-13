@@ -223,6 +223,7 @@ forum64 or the forum of the VzEkC.
 #include <math.h>
 #include <ctype.h>
 #include <errno.h>
+#include <unistd.h>
 
 
 char *Strcasestr(const char *s1, const char *s2)
@@ -3853,6 +3854,7 @@ int main(int argc, char *argv[])
    fclose(lf);
    if (df) fclose(df);
    fclose(of);
+   if (optc == 0) unlink(Opt);
    if (optc) printf("* Opt   : %-31.31s *\n",Opt);
    printf("* -d:%s     -i:%s     -n:%s     -x:%s *\n",
          Stat(Debug),Stat(IgnoreCase),Stat(WithLiNo),Stat(SkipHex));
