@@ -174,39 +174,40 @@ Conditional assembly
 ====================
 Example: Assemble first part if C64 has a non zero value
 
-#if MO5
+if MO5
    STA $D000
-#else
+else
    STA $9000
-#endif
+endif
 
 Example: Assemble first part if MO5 is defined ($0000 - $ffff)
 (undefined symbols are set to UNDEF ($ffff0000)
 
-#ifdef MO5
+ifdef MO5
    STA $D000
-#else
+else
    STA $9000
-#endif
+endif
 
 assembles the first statement if MO5 is not zero and the second if zero.
 
+
 Another example:
 
-#if MO5 | TO9          ; true if either MO5 or TO9 is true (not zero)
+if MO5 | TO9          ; true if either MO5 or TO9 is true (not zero)
    LDA #MASK
-#if MO5
+if MO5
    STA ICR_REG
-#else
+else
    STA TO9_ICR_REG
-#endif                   ; finishes inner if
-#endif                   ; finishes outer if
+endif                   ; finishes inner if
+endif                   ; finishes outer if
 
 Example: check and force error
 
-#if (MAXLEN & $ff00)
+if (MAXLEN & $ff00)
    #error This code is 8 bit only, MAXLEN too large!
-#endif
+endif
 
 The maximum nesting depth is 10
 
