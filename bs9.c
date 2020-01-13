@@ -596,6 +596,8 @@ int SkipLine[10];
 int ForcedEnd;    // Triggered by END command
 int IgnoreCase;   // 1: Ignore case for symbols
 int ForcedMode;   // -1: direct page, +1: extended
+int optc;         // count optimization messages
+int Preset;       // value for initialisation
 
 // Filenames
 
@@ -765,13 +767,47 @@ char *NextSymbol(char *p, char *s)
    return p;
 }
 
+// Compare two strings ignoring case
+
+int StrCaseCmp(const char *a, const char *b)
+{
+   unsigned int i,l,m;
+
+   l = strlen(a);
+   m = strlen(b);
+
+   for (i=0 ; i <= l && i <= m ; ++i)
+   {
+      if (toupper(a[i]) < toupper(b[i])) return -1;
+      if (toupper(a[i]) > toupper(b[i])) return  1;
+   }
+   return 0;
+}
+
+// Compare two strings ignoring case of max. length n
+
+int StrNCaseCmp(const char *a, const char *b, unsigned int n)
+{
+   unsigned int i,l,m;
+
+   l = strlen(a);
+   m = strlen(b);
+
+   for (i=0 ; i < n && i <= l && i <= m ; ++i)
+   {
+      if (toupper(a[i]) < toupper(b[i])) return -1;
+      if (toupper(a[i]) > toupper(b[i])) return  1;
+   }
+   return 0;
+}
+
 // Check if string s2 is a word in s1
 // and search string is followed by a white space or symbol
 
 int strcmpword(const char *s1, const char *s2)
 {
    int l = strlen(s2);
-   int r = strncasecmp(s1,s2,l);
+   int r = StrNCaseCmp(s1,s2,l);
    if (r == 0 && isym(s1[l])) r = 1;
    return r;
 }
@@ -939,7 +975,7 @@ int IsInstruction(char *p)
    for (i = 0 ; i < DimOp ; ++i)
    {
       l = strlen(Mat[i].Mne);
-      if (!strncasecmp(p,Mat[i].Mne,l) && !isym(p[l]))
+      if (!StrNCaseCmp(p,Mat[i].Mne,l) && !isym(p[l]))
       {
          return i;
       }
@@ -1010,13 +1046,13 @@ char *SetBSS(char *p)
 
 int StrCmp(const char *s1, const char *s2)
 {
-   if (IgnoreCase) return strcasecmp(s1,s2);
+   if (IgnoreCase) return StrCaseCmp(s1,s2);
    else            return strcmp(s1,s2);
 }
 
 int StrnCmp(const char *s1, const char *s2, size_t n)
 {
-   if (IgnoreCase) return strncasecmp(s1,s2,n);
+   if (IgnoreCase) return StrNCaseCmp(s1,s2,n);
    else            return strncmp(s1,s2,n);
 }
 
@@ -1729,7 +1765,7 @@ char *ParseFillData(char *p)
    int i,m,v;
 
    p = EvalOperand(p,&m,0);
-   if (m < 0 || m > 32767)
+   if (m < 0 || m > 0xffff)
    {
       ErrorMsg("Illegal FILL multiplier %d\n",m);
       exit(1);
@@ -2380,7 +2416,7 @@ int RegisterSize(int n)
 {
    char r;
 
-   if (!strncasecmp(Mat[n].Mne,"LDMD",4)) return 1;
+   if (!StrNCaseCmp(Mat[n].Mne,"LDMD",4)) return 1;
 
    r = Mat[n].Mne[strlen(Mat[n].Mne)-1];
 
@@ -2401,7 +2437,7 @@ char *ScanRegister(char *p, int *v)
 
    for (i=15 ; i >= 0 ; --i)
    {
-      if (!strncasecmp(RegisterNames[i],p,strlen(RegisterNames[i]))) break;
+      if (!StrNCaseCmp(RegisterNames[i],p,strlen(RegisterNames[i]))) break;
    }
    if (i < 0)
    {
@@ -2539,8 +2575,8 @@ int SetPostByte(char *p, int *v)
    // PC relative
 
    if (df) fprintf(df,"check PC relative %d [%s],<%s>\n",opl,p,p+opl-3);
-   if ((opl > 4 && strncasecmp(p+opl-4,",PCR",4) == 0) ||
-       (opl > 3 && strncasecmp(p+opl-3,",PC" ,3) == 0))
+   if ((opl > 4 && StrNCaseCmp(p+opl-4,",PCR",4) == 0) ||
+       (opl > 3 && StrNCaseCmp(p+opl-3,",PC" ,3) == 0))
    {
       if (df) fprintf(df,"check PC relative %s\n",p);
       p = EvalOperand(p,&off,0);
@@ -2807,6 +2843,7 @@ char *GenerateCode(char *p)
 
       if (Phase == 2 && ql == 2 && v >= -128 && v < 128)
       {
+         optc++;
          fprintf(of,"%4s to %3s range %4d on line %5d\n",
             Mat[MneIndex].Mne,Mat[MneIndex].Mne+1,v,LiNo);
       }
@@ -2949,6 +2986,7 @@ char *GenerateCode(char *p)
       rd = v - pc - 3;
       if (Phase == 2 && oc == 0xbd && rd >= -128 && rd < 128)
       {
+         optc++;
          fprintf(of," JSR to BSR range %4d on line %5d %s\n",
             rd,LiNo,Line);
       }
@@ -2958,6 +2996,7 @@ char *GenerateCode(char *p)
       rd = v - pc - 3;
       if (Phase == 2 && oc == 0x7e && rd >= -128 && rd < 128)
       {
+         optc++;
          fprintf(of," JMP to BRA range %4d on line %5d %s\n",
             rd,LiNo,Line);
       }
@@ -3717,6 +3756,11 @@ int main(int argc, char *argv[])
       else if (!strcmp(argv[ic],"-n")) WithLiNo = 1;
       else if (!strcmp(argv[ic],"-p")) Preprocess = 1;
       else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,1);
+      else if (!strncmp(argv[ic],"-l",2))
+      {
+         Preset = atoi(argv[++ic]);
+         memset(ROM,Preset,sizeof(ROM));
+      }
       else if (argv[ic][0] >= '0' || argv[ic][0] == '.')
       {
          if (!Src)
@@ -3735,10 +3779,11 @@ int main(int argc, char *argv[])
    if (!Src)
    {
       printf("*** missing filename for assembler source file ***\n");
-      printf("\nUsage: bs9 [-d -D -i -n -x] <source> [<list>]\n");
+      printf("\nUsage: bs9 [-d -D -i -l preset -n -x] <source> [<list>]\n");
       printf("   -d print details in file <Debug.lst>\n");
       printf("   -D Define symbols\n");
       printf("   -i ignore case in symbols\n");
+      printf("   -l preset value for memory\n");
       printf("   -n include line numbers in listing\n");
       printf("   -p print preprocessed source\n");
       printf("   -x assemble listing file - skip hex in front\n");
@@ -3752,23 +3797,20 @@ int main(int argc, char *argv[])
    strcpy(Opt,Src);
    strcat(Pre,".pp");
    if (!Lst[0]) strcpy(Lst,Src);
-   if (!(strlen(Src) > 4 && !strcasecmp(Src+strlen(Src)-4,".as9")))
+   if (!(strlen(Src) > 4 && !StrCaseCmp(Src+strlen(Src)-4,".as9")))
        strcat(Src,".as9");
-   if ( (strlen(Lst) > 4 && !strcasecmp(Lst+strlen(Lst)-4,".as9")))
+   if ( (strlen(Lst) > 4 && !StrCaseCmp(Lst+strlen(Lst)-4,".as9")))
        Lst[strlen(Lst)-4] = 0;
-   if (!(strlen(Lst) > 4 && !strcasecmp(Lst+strlen(Lst)-4,".lst")))
+   if (!(strlen(Lst) > 4 && !StrCaseCmp(Lst+strlen(Lst)-4,".lst")))
        strcat(Lst,".lst");
    strcat(Opt,".opt");
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 03-Jan-2020         *\n");
+   printf("* Bit Shift Assembler 13-Jan-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
-   printf("* -d:%s     -i:%s     -n:%s     -x:%s *\n",
-         Stat(Debug),Stat(IgnoreCase),Stat(WithLiNo),Stat(SkipHex));
-   printf("*******************************************\n");
 
    sf = fopen(Src,"r");
    if (!sf)
@@ -3798,9 +3840,17 @@ int main(int argc, char *argv[])
    fclose(lf);
    if (df) fclose(df);
    fclose(of);
+   if (optc) printf("* Opt   : %-31.31s *\n",Opt);
+   printf("* -d:%s     -i:%s     -n:%s     -x:%s *\n",
+         Stat(Debug),Stat(IgnoreCase),Stat(WithLiNo),Stat(SkipHex));
+   printf("*******************************************\n");
    printf("* Source Lines: %6d                    *\n",TotalLiNo);
    printf("* Symbols     : %6d                    *\n",Labels);
    printf("* Macros      : %6d                    *\n",Macros);
+   if (Preset)
+   printf("* Preset      : %6d                    *\n",Preset);
+   if (optc)
+   printf("* Hints       : %6d for optimization   *\n",optc);
    printf("*******************************************\n");
    if (ErrNum)
       printf("* %3d error%s occured%s                      *\n",
