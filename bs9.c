@@ -191,6 +191,11 @@ endif
 
 assembles the first statement if MO5 is not zero and the second if zero.
 
+Example: Assemble if symbol is undefined
+
+ifndef TO9
+   STA $D000 ; Code for MO5 and TO8
+endif
 
 Another example:
 
@@ -2338,7 +2343,7 @@ void CheckSkip(void)
 
 int CheckCondition(char *p)
 {
-   int r,v,Ifdef,Ifval;
+   int r,v,Ifdef,Ifndef,Ifval;
    r = 0;
    if (df) fprintf(df,"Check <%s>\n",p);
    if (*p == '#') ++p; // old syntax #if, #endif, etc.
@@ -2354,9 +2359,10 @@ int CheckCondition(char *p)
       free(msg);
       exit(1);
    }
-   Ifdef = !strcmpword(p,"ifdef");
-   Ifval = !strcmpword(p,"if");
-   if (Ifdef || Ifval)
+   Ifdef  = !strcmpword(p,"ifdef");
+   Ifndef = !strcmpword(p,"ifndef");
+   Ifval  = !strcmpword(p,"if");
+   if (Ifdef || Ifndef || Ifval)
    {
       r = 1;
       IfLevel++;
@@ -2370,6 +2376,11 @@ int CheckCondition(char *p)
       {
          p = EvalOperand(p+6,&v,0);
          SkipLine[IfLevel] = v == UNDEF;
+      }
+      else if (Ifndef)
+      {
+         p = EvalOperand(p+7,&v,0);
+         SkipLine[IfLevel] = v == UNDEF ? 0 : 1;
       }
       else // if (Ifval)
       {
