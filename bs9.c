@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 03-Jan-2020
+Version: 16-Jan-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -229,7 +229,6 @@ forum64 or the forum of the VzEkC.
 #include <math.h>
 #include <ctype.h>
 #include <errno.h>
-#include <unistd.h>
 
 
 char *Strcasestr(const char *s1, const char *s2)
@@ -238,7 +237,7 @@ char *Strcasestr(const char *s1, const char *s2)
    char h2[256];
    char *r;
 
-    int i;
+    unsigned int i;
 
     for (i=0 ; i < strlen(s1)+1 ; ++i) h1[i] = tolower(s1[i]);
     for (i=0 ; i < strlen(s2)+1 ; ++i) h2[i] = tolower(s2[i]);
@@ -254,20 +253,35 @@ char *Strcasestr(const char *s1, const char *s2)
 
 void *AssertAlloc(void *p)
 {
-   if (p != NULL) return p;
+   if (p) return p;
    fprintf(stderr, "Allocation of memory failed.\n");
    exit(1);
 }
 
 void *MallocOrDie(size_t size)
 {
-   return AssertAlloc(malloc(size));
+   return AssertAlloc(calloc(size,1));
 }
 
 void *ReallocOrDie(void *p, size_t size)
 {
    return AssertAlloc(realloc(p, size));
 }
+
+#define MAX_STR 1024
+void *StrNDup(void *src, unsigned int n)
+{
+   void *dst;
+   if (n > MAX_STR)
+   {
+      fprintf(stderr,"*** tried to allocate %d bytes for string\n",n);
+      fprintf(stderr,"*** current maximum length is %d\n",MAX_STR);
+      exit(1);
+   }
+   dst = MallocOrDie(n+1);
+   memmove(dst,src,n);
+   return dst;
+ }
 
 #define  CPU_6809 0
 #define  CPU_6309 1
@@ -1177,8 +1191,7 @@ char *DefineLabel(char *p, int *val, int Locked)
       if (j < 0)
       {
          j = Labels;
-         lab[j].Name = MallocOrDie(l+1);
-         strcpy(lab[j].Name,Label);
+         lab[j].Name = StrNDup(Label,l);
          lab[j].Address = UNDEF;
          lab[j].Ref = MallocOrDie(sizeof(int));
          lab[j].Att = MallocOrDie(sizeof(int));
@@ -1209,8 +1222,7 @@ char *DefineLabel(char *p, int *val, int Locked)
       if (j < 0)
       {
          j = Labels;
-         lab[j].Name = MallocOrDie(l+1);
-         strcpy(lab[j].Name,Label);
+         lab[j].Name = StrNDup(Label,l);
          lab[j].Address = UNDEF;
          lab[j].Ref = MallocOrDie(sizeof(int));
          lab[j].Att = MallocOrDie(sizeof(int));
@@ -1237,8 +1249,7 @@ char *DefineLabel(char *p, int *val, int Locked)
       if (j < 0)
       {
          j = Labels;
-         lab[j].Name = MallocOrDie(l+1);
-         strcpy(lab[j].Name,Label);
+         lab[j].Name = StrNDup(Label,l);
          lab[j].Address = pc;
          lab[j].Ref = MallocOrDie(sizeof(int));
          lab[j].Att = MallocOrDie(sizeof(int));
@@ -1282,8 +1293,7 @@ void AddLabel(char *p)
    }
    l = strlen(p);
    lab[Labels].Address = UNDEF;
-   lab[Labels].Name = MallocOrDie(l+1);
-   strcpy(lab[Labels].Name,p);
+   lab[Labels].Name = StrNDup(p,l);
    lab[Labels].Ref = MallocOrDie(sizeof(int));
    lab[Labels].Att = MallocOrDie(sizeof(int));
    lab[Labels].Ref[0] = LiNo;
@@ -1853,8 +1863,7 @@ char *IncludeFile(char *p)
    }
    IncludeStack[IncludeLevel].LiNo = LiNo;
    IncludeStack[++IncludeLevel].fp = sf;
-   IncludeStack[IncludeLevel].Src = MallocOrDie(strlen(FileName + 1));
-   strcpy(IncludeStack[IncludeLevel].Src, FileName);
+   IncludeStack[IncludeLevel].Src = StrNDup(FileName,strlen(FileName));
    PrintLine();
    LiNo = 0;
    return p+1; // skip quote after filename
@@ -1898,7 +1907,7 @@ char *ParseStoreData(char *p)
    }
    EndPtr = ++p;
    while (*EndPtr != '\0' && *EndPtr != '"') ++EndPtr;
-   Filename = AssertAlloc(strndup(p, EndPtr - p));
+   Filename = StrNDup(p, EndPtr - p);
    FileFormat = BINARY;
    Entry = -1;
    p = NeedChar(EndPtr,',');
@@ -2350,13 +2359,8 @@ int CheckCondition(char *p)
    if (!strcmpword(p,"error") && (Phase == 1))
    {
       CheckSkip();
-      if (Skipping)
-         return 0;          // Include line in listing
-      char *msg = MallocOrDie(strlen(p+6) + 2);
-      strcpy(msg, p+6);
-      strcat(msg, "\n");
-      ErrorMsg(msg);
-      free(msg);
+      if (Skipping) return 0;     // Include line in listing
+      ErrorMsg("%s\n",p+6);
       exit(1);
    }
    Ifdef  = !strcmpword(p,"ifdef");
@@ -2380,7 +2384,7 @@ int CheckCondition(char *p)
       else if (Ifndef)
       {
          p = EvalOperand(p+7,&v,0);
-         SkipLine[IfLevel] = v == UNDEF ? 0 : 1;
+         SkipLine[IfLevel] = v != UNDEF;
       }
       else // if (Ifval)
       {
@@ -3112,7 +3116,7 @@ int ScanArguments(char *p, char *args, int ptr[], int nargs)
       if (*p == ')') break; // end of list
       p = GetMacroArg(p,sym);
       l = strlen(sym);
-      if (l) strcpy(args+ptr[n],sym);
+      if (l) memmove(args+ptr[n],sym,l);
       else   args[ptr[n]] = 0;
       ++n;
       ptr[n] = ptr[n-1] + l + 1;
@@ -3147,7 +3151,7 @@ int ScanArgs(char *p, char *args, int ptr[])
       p = NextSymbol(p,sym);
       // if (df) fprintf(df,"ScanSym:<%s>\n",sym);
       l = strlen(sym);
-      if (l) strcpy(args+ptr[n],sym);
+      if (l) memmove(args+ptr[n],sym,l);
       else   args[ptr[n]] = 0;
       ++n;
       ptr[n] = ptr[n-1] + l + 1;
@@ -3221,8 +3225,7 @@ void RecordMacro(char *p)
    if (j < 0)  // create new entry in macro table
    {
       j = Macros;
-      Mac[j].Name = MallocOrDie(l+1);
-      strcpy(Mac[j].Name,Macro);
+      Mac[j].Name = StrNDup(Macro,l);
       Mac[j].Narg = an;
       Mac[j].Type = mf;
       fgets(Line,sizeof(Line),sf);
@@ -3265,8 +3268,7 @@ void RecordMacro(char *p)
          if (bl == 1)
          {
             bl = l+1;
-            Mac[j].Body = MallocOrDie(bl);
-            strcpy(Mac[j].Body,Buf);
+            Mac[j].Body = StrNDup(Buf,l);
          }
          else
          {
@@ -3705,18 +3707,17 @@ void WriteS19Format(int i)
     char *filename, *ExtPtr;
     int UnwrittenBytes,Addr,BytesInThisLine;
 
-    filename = MallocOrDie(strlen(SFF[i] + 4 + 1));
-    strcpy(filename, SFF[i]);
+    filename = StrNDup(SFF[i],strlen(SFF[i] + 4));
     ExtPtr = strrchr(filename, '.');
     if (!ExtPtr) ExtPtr = filename + strlen(filename);
-    strcpy(ExtPtr, ".S19");
+    memmove(ExtPtr, ".S19",4);
     if (df) fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
                     SFA[i],SFA[i]+SFL[i],filename);
     bf = fopen(filename, "wb");
     free(filename);
 
     // Write a S0 header which the TTL pseudo op should define
-    strcpy((char *)buf,"Bit Shift Assembler");
+    memmove((char *)buf,"Bit Shift Assembler",19);
     WriteS19Line(bf, "S0", strlen((char *)buf), 0, buf);
 
     SFR[i] = 0;
@@ -3789,12 +3790,8 @@ int main(int argc, char *argv[])
       }
       else if (argv[ic][0] >= '0' || argv[ic][0] == '.')
       {
-         if (!Src)
-         {
-              Src = MallocOrDie(strlen(argv[ic]) + 4 + 1);
-              strcpy(Src,argv[ic]);
-         }
-         else if (!Lst[0]) strcpy(Lst,argv[ic]);
+         if (!Src) Src = StrNDup(argv[ic],strlen(argv[ic]) + 4);
+         else if (!Lst[0]) memmove(Lst,argv[ic],strlen(argv[ic]));
       }
       else
       {
@@ -3819,10 +3816,10 @@ int main(int argc, char *argv[])
    // default file names if only source file specified:
    // prog.as9   prog   prog.lst   prog.opt
 
-   strcpy(Pre,Src);
-   strcpy(Opt,Src);
+   memmove(Pre,Src,strlen(Src));
+   memmove(Opt,Src,strlen(Src));
    strcat(Pre,".pp");
-   if (!Lst[0]) strcpy(Lst,Src);
+   if (!Lst[0]) memmove(Lst,Src,strlen(Src));
    if (!(strlen(Src) > 4 && !StrCaseCmp(Src+strlen(Src)-4,".as9")))
        strcat(Src,".as9");
    if ( (strlen(Lst) > 4 && !StrCaseCmp(Lst+strlen(Lst)-4,".as9")))
@@ -3833,7 +3830,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 13-Jan-2020         *\n");
+   printf("* Bit Shift Assembler 16-Jan-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
@@ -3866,7 +3863,7 @@ int main(int argc, char *argv[])
    fclose(lf);
    if (df) fclose(df);
    fclose(of);
-   if (optc == 0) unlink(Opt);
+   if (optc == 0) remove(Opt);
    if (optc) printf("* Opt   : %-31.31s *\n",Opt);
    printf("* -d:%s     -i:%s     -n:%s     -x:%s *\n",
          Stat(Debug),Stat(IgnoreCase),Stat(WithLiNo),Stat(SkipHex));
