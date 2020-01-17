@@ -234,24 +234,29 @@ forum64 or the forum of the VzEkC.
 #include <ctype.h>
 #include <errno.h>
 
+#define MAX_STR 1024
 
-char *Strcasestr(const char *s1, const char *s2)
+// **********
+// StrCaseStr
+// **********
+
+char *StrCaseStr(char *s1, char *s2)
 {
-   char h1[256];
-   char h2[256];
+   char h1[MAX_STR];
+   char h2[MAX_STR];
    char *r;
+   unsigned int i;
 
-    unsigned int i;
+   memset(h1,0,sizeof(h1));
+   memset(h2,0,sizeof(h2));
 
-    for (i=0 ; i < strlen(s1)+1 ; ++i) h1[i] = tolower(s1[i]);
-    for (i=0 ; i < strlen(s2)+1 ; ++i) h2[i] = tolower(s2[i]);
+    for (i=0 ; i < strlen(s1) && i < sizeof(h1)-1 ; ++i)
+        h1[i] = toupper(s1[i]);
+    for (i=0 ; i < strlen(s2) && i < sizeof(h2)-1 ; ++i)
+        h2[i] = toupper(s2[i]);
 
     r = strstr(h1,h2);
-    if (r)
-    {
-       i = r - h1;
-       r += i;
-    }
+    if (r) r = s1 + (r - h1);
     return r;
 }
 
@@ -272,7 +277,6 @@ void *ReallocOrDie(void *p, size_t size)
    return AssertAlloc(realloc(p, size));
 }
 
-#define MAX_STR 1024
 void *StrNDup(void *src, unsigned int n)
 {
    void *dst;
@@ -1360,9 +1364,26 @@ char *EvalSymBytes(char *p, int *v)
    return p;
 }
 
+int Nib2Byte(char nib)
+{
+   if (nib >= '0' && nib <= '9') return nib - '0';
+   if (nib >= 'A' && nib <= 'F') return nib - 'A' + 10;
+   if (nib >= 'a' && nib <= 'f') return nib - 'a' + 10;
+   return -1;
+}
+
+int Hex2Byte(char hex[])
+{
+   int h,l;
+   h = Nib2Byte(hex[0]);
+   l = Nib2Byte(hex[1]);
+   if (h >= 0 && l >= 0) return (h << 4) | l;
+   return -1;
+}
 
 char *ParseRealData(char *p)
 {
+
    int i,v,mansize;
    int Sign,Exponent;
    union udb
@@ -1382,8 +1403,7 @@ char *ParseRealData(char *p)
       ++p;
       for (i=0 ; i < mansize+1 ; ++i, p+=2)
       {
-          if (!isxdigit(*p)) break;
-          sscanf(p,"%2x",&v);
+          if ((v = Hex2Byte(p)) < 0) break;
           Operand[i] = v;
       }
    }
@@ -1439,6 +1459,18 @@ char *ParseRealData(char *p)
    return p + strlen(p);;
 }
 
+char *EvalHexValue(char *p, int *v)
+{
+   char *EndPtr;
+   *v = strtol(p,&EndPtr,16);
+   if (EndPtr == p || *v < 0 || *v > 0xffff)
+   {
+      ErrorLine(p);
+      ErrorMsg("Illegal hex value\n");
+      exit(1);
+   }
+   return EndPtr;
+}
 
 char *EvalDecValue(char *p, int *v)
 {
@@ -1446,12 +1478,12 @@ char *EvalDecValue(char *p, int *v)
 
    // check for xxxxH or xxxxh hex syntax;
 
-   for (i=0 ; i < 5 ; ++i) // allow max. 4 hex digits
+   for (i=0 ; i < 5 ; ++i) // allow max. 5 hex digits
       if (!isxdigit(p[i])) break;
    if (p[i] == 'H' || p[i] == 'h')
    {
-      sscanf(p,"%x",v);
-      return p+i+1;
+      p = EvalHexValue(p,v);
+      return p+1;
    }
 
    // check for decimal value
@@ -1493,13 +1525,6 @@ char *EvalMultiCharValue(char *p, int *v)
    return p;
 }
 
-
-char *EvalHexValue(char *p, int *v)
-{
-   sscanf(p,"%x",v);
-   while (isxdigit(*p)) ++p;
-   return p;
-}
 
 
 char *EvalBinValue(char *p, int *v)
@@ -3233,7 +3258,7 @@ void RecordMacro(char *p)
       Mac[j].Narg = an;
       Mac[j].Type = mf;
       fgets(Line,sizeof(Line),sf);
-      while (!feof(sf) && !Strcasestr(Line,"ENDM"))
+      while (!feof(sf) && !StrCaseStr(Line,"ENDM"))
       {
          ++LiNo;
          l = strlen(Line);
@@ -3297,7 +3322,7 @@ void RecordMacro(char *p)
          ++LiNo;
          fprintf(lf,"            %s",Line);
          if (pf) fprintf(pf,"%s",Line);
-      } while (!feof(sf) && !Strcasestr(Line,"ENDM"));
+      } while (!feof(sf) && !StrCaseStr(Line,"ENDM"));
       LiNo-=2;
    }
    else if (Phase == 1)
