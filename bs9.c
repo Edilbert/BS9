@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 16-Jan-2020
+Version: 17-Jan-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -221,6 +221,10 @@ Thomson MO5 available from the user "Bit Shifter" e.g. at
 forum64 or the forum of the VzEkC.
 
 */
+
+// switch of windows warnings for string functions
+
+#define _CRT_SECURE_NO_WARNINGS
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -3830,7 +3834,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 16-Jan-2020         *\n");
+   printf("* Bit Shift Assembler 17-Jan-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
