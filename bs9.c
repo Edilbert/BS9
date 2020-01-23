@@ -3150,7 +3150,7 @@ int ScanArguments(char *p, char *args, int ptr[], int nargs)
       if (*p == ')') break; // end of list
       p = GetMacroArg(p,sym);
       l = strlen(sym);
-      if (l) memmove(args+ptr[n],sym,l);
+      if (l) memmove(args+ptr[n],sym,l+1);
       else   args[ptr[n]] = 0;
       ++n;
       ptr[n] = ptr[n-1] + l + 1;
