@@ -37,7 +37,7 @@ bs9 hello
 It will read "hello.as9" as input file and write the
 listing file with cross reference "hello.lst".
 Binary output is controlled within the source file by means
-of the pseudo op "!STORE" (see below for syntax):
+of the pseudo op "STORE" (see below for syntax):
 
 Case sensitivity
 ================
