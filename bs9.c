@@ -2260,6 +2260,23 @@ char *ps_org(char *p)
    return p;
 }
 
+char *ps_rmb(char *p)
+{
+   int size;
+
+   ExtractOpText(p);
+   EvalOperand(OpText,&size,0);
+   if (size < 0)
+   {
+      ErrorMsg("Only theoretical physicists are allowed to reserve "
+               "a negative amount of space: %d bytes\n", size);
+      exit(1);
+   }
+   pc+=size;
+   PrintPCLine();
+   return p;
+}
+
 char *ps_sect(char *p)
 {
    char *q;
@@ -2301,6 +2318,7 @@ struct PseudoStruct PseudoTab[] =
    {"FCB"    , &ps_byte   },
    {"FCC"    , &ps_string },
    {"FDB"    , &ps_word   },
+   {"RMB"    , &ps_rmb    },
    {"FORMLN" , &ps_formln },
    {"ORG"    , &ps_org    },
    {"REAL"   , &ps_real   },
