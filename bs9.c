@@ -902,10 +902,13 @@ void ErrorMsg(const char *format, ...) {
    va_start(args,format);
    vsnprintf(buf+strlen(buf), SIZE_ERRMSG-strlen(buf), format, args);
    va_end(args);
+   fputs(Line, stdout);
+   fputs(Line, lf);
    fputs(buf, stdout);
    fputs(buf, lf);
    if (df)
    {
+      fputs(Line, df);
       fputs(buf, df);
       ListSymbols(df,Labels,0,0xffff);
    }
