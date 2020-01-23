@@ -37,7 +37,7 @@ bs9 hello
 It will read "hello.as9" as input file and write the
 listing file with cross reference "hello.lst".
 Binary output is controlled within the source file by means
-of the pseudo op "!STORE" (see below for syntax):
+of the pseudo op "STORE" (see below for syntax):
 
 Case sensitivity
 ================
@@ -281,6 +281,13 @@ void *MallocOrDie(size_t size)
 void *ReallocOrDie(void *p, size_t size)
 {
    return AssertAlloc(realloc(p, size));
+}
+
+void *AssertFileOp(void *p, const char *msg)
+{
+   if (p) return p;
+   perror(msg);
+   exit(1);
 }
 
 void *StrNDup(void *src, unsigned int n)
@@ -902,10 +909,13 @@ void ErrorMsg(const char *format, ...) {
    va_start(args,format);
    vsnprintf(buf+strlen(buf), SIZE_ERRMSG-strlen(buf), format, args);
    va_end(args);
+   fputs(Line, stdout);
+   fputs(Line, lf);
    fputs(buf, stdout);
    fputs(buf, lf);
    if (df)
    {
+      fputs(Line, df);
       fputs(buf, df);
       ListSymbols(df,Labels,0,0xffff);
    }
@@ -2257,6 +2267,23 @@ char *ps_org(char *p)
    return p;
 }
 
+char *ps_rmb(char *p)
+{
+   int size;
+
+   ExtractOpText(p);
+   EvalOperand(OpText,&size,0);
+   if (size < 0)
+   {
+      ErrorMsg("Only theoretical physicists are allowed to reserve "
+               "a negative amount of space: %d bytes\n", size);
+      exit(1);
+   }
+   pc+=size;
+   PrintPCLine();
+   return p;
+}
+
 char *ps_sect(char *p)
 {
    char *q;
@@ -2298,6 +2325,7 @@ struct PseudoStruct PseudoTab[] =
    {"FCB"    , &ps_byte   },
    {"FCC"    , &ps_string },
    {"FDB"    , &ps_word   },
+   {"RMB"    , &ps_rmb    },
    {"FORMLN" , &ps_formln },
    {"ORG"    , &ps_org    },
    {"REAL"   , &ps_real   },
@@ -3543,13 +3571,16 @@ void Phase1Listing(void)
 
 int CloseInclude(void)
 {
+   char *msg = "Close INCLUDE file";
+
    PrintLiNo();
    if (Phase == 2)
    {
       fprintf(lf,";                       closed INCLUDE file %s\n",
             IncludeStack[IncludeLevel].Src);
+      if (ferror(lf)) AssertFileOp(NULL, msg);
    }
-   fclose(sf);
+   if (fclose(sf)) AssertFileOp(NULL, msg);
    free(IncludeStack[IncludeLevel].Src);
    sf = IncludeStack[--IncludeLevel].fp;
    LiNo = IncludeStack[IncludeLevel].LiNo;
@@ -3702,36 +3733,41 @@ void WriteBinaryFormat(int i)
 {
     unsigned char lo,hi;
     FILE *bf;
+    const char *msg = "Write binary";
 
     if (df) fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
                     SFA[i],SFA[i]+SFL[i],SFF[i]);
-    bf = fopen(SFF[i],"wb");
+    bf = AssertFileOp(fopen(SFF[i],"wb"), msg);
     if (SFE[i] > -1)
     {
        lo = SFA[i] & 0xff;
        hi = SFA[i]  >>  8;
-       fwrite(&hi,1,1,bf);
-       fwrite(&lo,1,1,bf);
+       if (fwrite(&hi,1,1,bf) < 1) AssertFileOp(NULL, msg);
+       if (fwrite(&lo,1,1,bf) < 1) AssertFileOp(NULL, msg);
     }
-    fwrite(ROM+SFA[i],1,SFL[i],bf);
-    fclose(bf);
+    if (fwrite(ROM+SFA[i],1,SFL[i],bf) < (size_t)SFL[i]) AssertFileOp(NULL, msg);
+    if (fclose(bf)) AssertFileOp(NULL, msg);
 }
 
 void WriteS19Line(FILE *bf, char *RecordType, int PayloadSize, int Address, unsigned char *Data)
 {
    int i,Checksum;
+   const char *msg = "Write S19 record";
 
    fprintf(bf, "%s", RecordType);
    // 3 extra bytes for address and checksum
    Checksum = PayloadSize + 3 + (Address & 0xff) + (Address >> 8);
    fprintf(bf, "%02X%04X", PayloadSize + 3, Address);
+   if (ferror(bf)) AssertFileOp(NULL, msg);
    for (i=0; i < PayloadSize; ++i)
    {
       fprintf(bf, "%02X", Data[i]);
+      if (ferror(bf)) AssertFileOp(NULL, msg);
       Checksum += Data[i];
    }
    // Force CR LF line endings for ancient EPROM programmers
    fprintf(bf, "%02X\r\n", ~Checksum & 0xff);
+   if (ferror(bf)) AssertFileOp(NULL, msg);
 }
 
 void WriteS19Format(int i)
@@ -3740,6 +3776,7 @@ void WriteS19Format(int i)
     FILE *bf;
     char *filename, *ExtPtr;
     int UnwrittenBytes,Addr,BytesInThisLine;
+    const char *msg = "Write S19 file";
 
     filename = StrNDup(SFF[i],strlen(SFF[i] + 4));
     ExtPtr = strrchr(filename, '.');
@@ -3747,7 +3784,8 @@ void WriteS19Format(int i)
     memmove(ExtPtr, ".S19",4);
     if (df) fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
                     SFA[i],SFA[i]+SFL[i],filename);
-    bf = fopen(filename, "wb");
+   if (ferror(df)) AssertFileOp(NULL, msg);
+    bf = AssertFileOp(fopen(filename, "wb"), msg);
     free(filename);
 
     // Write a S0 header which the TTL pseudo op should define
@@ -3770,7 +3808,7 @@ void WriteS19Format(int i)
     WriteS19Line(bf, "S5", 0, SFR[i], NULL);
 
     if (SFE[i] > -1) WriteS19Line(bf, "S9", 0, SFE[i], NULL);
-    fclose(bf);
+    if (fclose(bf)) AssertFileOp(NULL, msg);
 }
 
 void WriteBinaries(void)
@@ -3877,10 +3915,10 @@ int main(int argc, char *argv[])
    }
    IncludeStack[0].fp = sf;
    IncludeStack[0].Src = Src;
-   lf = fopen(Lst,"w");  // Listing
-   if (Debug) df = fopen("Debug.lst","w");
-   if (Preprocess) pf = fopen(Pre,"w");
-   of = fopen(Opt,"w");
+   lf = AssertFileOp(fopen(Lst,"w"), "Open list file");
+   if (Debug) df = AssertFileOp(fopen("Debug.lst","w"), "Open Debug file");
+   if (Preprocess) pf = AssertFileOp(fopen(Pre,"w"), "Open preprocessor file");
+   of = AssertFileOp(fopen(Opt,"w"), "Open hint file");
 
    Phase1();
    Phase2();
@@ -3893,10 +3931,11 @@ int main(int argc, char *argv[])
    qsort(lab,Labels,sizeof(struct LabelStruct),CmpRefs);
    ListSymbols(lf,Labels,0,0xff);
    ListSymbols(lf,Labels,0,0x4000);
-   fclose(sf);
-   fclose(lf);
-   if (df) fclose(df);
-   fclose(of);
+   if (fclose(sf)) AssertFileOp(NULL, "Close source file");
+   if (fclose(lf)) AssertFileOp(NULL, "Close list file");
+
+   if (df) if (fclose(df)) AssertFileOp(NULL, "Close debug file");
+   if (fclose(of)) AssertFileOp(NULL, "Close hint file");
    if (optc == 0) remove(Opt);
    if (optc) printf("* Opt   : %-31.31s *\n",Opt);
    printf("* -d:%s     -i:%s     -n:%s     -x:%s *\n",
