@@ -1269,7 +1269,7 @@ char *DefineLabel(char *p, int *val, int Locked)
          lab[j].Att = MallocOrDie(sizeof(int));
          Labels++;
       }
-      else if (lab[j].Address < 0) lab[j].Address = pc;
+      else if (lab[j].Address == UNDEF) lab[j].Address = pc;
       else if (lab[j].Address != pc && !lab[j].Locked)
       {
          ++ErrNum;
@@ -3183,9 +3183,9 @@ int ScanArgs(char *p, char *args, int ptr[])
       p = SkipSpace(p);
       if (*p == ';') break; // comment
       p = NextSymbol(p,sym);
-      // if (df) fprintf(df,"ScanSym:<%s>\n",sym);
       l = strlen(sym);
-      if (l) memmove(args+ptr[n],sym,l);
+      // if (df) fprintf(df,"ScanSym:<%s>[%d]\n",sym,l);
+      if (l) memmove(args+ptr[n],sym,l+1);
       else   args[ptr[n]] = 0;
       ++n;
       ptr[n] = ptr[n-1] + l + 1;
