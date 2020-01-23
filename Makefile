@@ -13,7 +13,7 @@ endif
 all: $(EXE)
 
 $(EXE):	bs9.c
-	$(CC) -Wall -Wno-missing-braces -Wno-pointer-sign -std=gnu99 $< -o $@ -g
+	$(CC) -Wall -Wextra -pedantic -std=c99 $< -o $@ -g
 
 install:
 	install $(EXE) $(PREFIX)/bin
