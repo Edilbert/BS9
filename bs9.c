@@ -3783,9 +3783,12 @@ void WriteS19Format(int i)
     ExtPtr = strrchr(filename, '.');
     if (!ExtPtr) ExtPtr = filename + strlen(filename);
     memmove(ExtPtr, ".S19",5);
-    if (df) fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
+    if (df)
+    {
+       fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
                     SFA[i],SFA[i]+SFL[i],filename);
-   if (ferror(df)) AssertFileOp(NULL, msg);
+       if (ferror(df)) AssertFileOp(NULL, msg);
+    }
     bf = AssertFileOp(fopen(filename, "wb"), msg);
     free(filename);
 
