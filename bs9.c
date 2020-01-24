@@ -266,6 +266,10 @@ char *StrCaseStr(char *s1, char *s2)
     return r;
 }
 
+// ***********
+// AssertAlloc
+// ***********
+
 void *AssertAlloc(void *p)
 {
    if (p) return p;
@@ -644,10 +648,12 @@ int Preset;       // value for initialisation
 
 // Filenames
 
-char *Src;
-char  Lst[256];
-char  Pre[256];
-char  Opt[256];
+#define FNSIZE 256
+
+char *Src;               // source file
+char  Lst[FNSIZE];       // list file
+char  Pre[FNSIZE];       // preprocessed file
+char  Opt[FNSIZE];       // optimzation hints
 
 int GenStart = 0x10000 ; // Lowest assemble address
 int GenEnd   =       0 ; //Highest assemble address
@@ -865,7 +871,7 @@ char *SkipHexCode(char *p)
        isxdigit(p[8]) && isxdigit(p[9]) &&
        p[0] != ';')
    {
-      if (SkipHex) memmove(Line,Line+20,l-20);
+      if (SkipHex) memmove(Line,Line+20,l-19);
       else return (p+20);
    }
    return p;
@@ -1419,7 +1425,8 @@ char *ParseRealData(char *p)
       ++p;
       for (i=0 ; i < mansize+1 ; ++i, p+=2)
       {
-          if ((v = Hex2Byte(p)) < 0) break;
+          v = Hex2Byte(p);
+          if (v < 0) break;
           Operand[i] = v;
       }
    }
@@ -1734,12 +1741,6 @@ char *EvalOperand(char *p, int *v, int prio)
       return p;
    }
    p = SkipSpace(p);
-
-   // Unary operands are not allowed here
-
-   if (*p && strchr("[!~$'%?",*p))
-   {
-   }
 
    while (*p && strchr("*/+-<>=!&^|",*p))
    {
@@ -2602,8 +2603,8 @@ int SetPostByte(char *p, int *v)
       ++p;
       if (df) fprintf(df,"is indirect <%s>\n",p);
    }
-   if ((ind = 0x10 * (*p == '['))) ++p;
-
+   ind = 0x10 * (*p == '[');
+   if (ind) ++p;
 
    if (df) fprintf(df,"Check R,R: %c%c%c\n",toupper(p[0]),p[1],toupper(p[2]));
 
@@ -3781,7 +3782,7 @@ void WriteS19Format(int i)
     filename = StrNDup(SFF[i],strlen(SFF[i] + 4));
     ExtPtr = strrchr(filename, '.');
     if (!ExtPtr) ExtPtr = filename + strlen(filename);
-    memmove(ExtPtr, ".S19",4);
+    memmove(ExtPtr, ".S19",5);
     if (df) fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
                     SFA[i],SFA[i]+SFL[i],filename);
    if (ferror(df)) AssertFileOp(NULL, msg);
@@ -3789,7 +3790,7 @@ void WriteS19Format(int i)
     free(filename);
 
     // Write a S0 header which the TTL pseudo op should define
-    memmove((char *)buf,"Bit Shift Assembler",19);
+    memmove((char *)buf,"Bit Shift Assembler",20);
     WriteS19Line(bf, "S0", strlen((char *)buf), 0, buf);
 
     SFR[i] = 0;
@@ -3833,12 +3834,13 @@ const char *Stat(int o)
 
 int main(int argc, char *argv[])
 {
-   int ic,v;
+   int ic,l,v;
    char *EndPtr;
+   char *argsrc = NULL; // argument filename;
 
    for (ic=1 ; ic < argc ; ++ic)
    {
-      if (!strcmp(argv[ic],"-x")) SkipHex = 1;
+           if (!strcmp(argv[ic],"-x")) SkipHex = 1;
       else if (!strcmp(argv[ic],"-d")) Debug = 1;
       else if (!strcmp(argv[ic],"-i")) IgnoreCase = 1;
       else if (!strcmp(argv[ic],"-n")) WithLiNo = 1;
@@ -3860,21 +3862,20 @@ int main(int argc, char *argv[])
          }
          memset(ROM,Preset,sizeof(ROM));
       }
-      else if (argv[ic][0] >= '0' || argv[ic][0] == '.')
+      else if (argsrc == NULL && (argv[ic][0] >= '0' || argv[ic][0] == '.'))
       {
-         if (!Src) Src = StrNDup(argv[ic],strlen(argv[ic]) + 4);
-         else if (!Lst[0]) memmove(Lst,argv[ic],strlen(argv[ic]));
+         argsrc = argv[ic];
       }
       else
       {
-         printf("\nUsage: bs9 [-d -D -i -x] <source> <list>\n");
+         printf("\nUsage: bs9 [-d -D -i -x] <source>\n");
          exit(1);
       }
    }
-   if (!Src)
+   if (!argsrc)
    {
       printf("*** missing filename for assembler source file ***\n");
-      printf("\nUsage: bs9 [-d -D -i -l preset -n -x] <source> [<list>]\n");
+      printf("\nUsage: bs9 [-d -D -i -l preset -n -x] <source>\n");
       printf("   -d print details in file <Debug.lst>\n");
       printf("   -D Define symbols\n");
       printf("   -i ignore case in symbols\n");
@@ -3886,19 +3887,39 @@ int main(int argc, char *argv[])
    }
 
    // default file names if only source file specified:
-   // prog.as9   prog   prog.lst   prog.opt
+   // prog.as9   prog.pp   prog.lst   prog.opt
 
-   memmove(Pre,Src,strlen(Src));
-   memmove(Opt,Src,strlen(Src));
-   strcat(Pre,".pp");
-   if (!Lst[0]) memmove(Lst,Src,strlen(Src));
-   if (!(strlen(Src) > 4 && !StrCaseCmp(Src+strlen(Src)-4,".as9")))
-       strcat(Src,".as9");
-   if ( (strlen(Lst) > 4 && !StrCaseCmp(Lst+strlen(Lst)-4,".as9")))
-       Lst[strlen(Lst)-4] = 0;
-   if (!(strlen(Lst) > 4 && !StrCaseCmp(Lst+strlen(Lst)-4,".lst")))
-       strcat(Lst,".lst");
-   strcat(Opt,".opt");
+   l = strlen(argsrc);
+   if (l > FNSIZE - 4)
+   {
+      fprintf(stderr,"\n*** filename too long ***\n");
+      exit(1);
+   }
+
+   // check extension of form ".xxx"
+
+   if (l > 4 && argsrc[l-4] == '.')
+   {
+      Src = StrNDup(argsrc,l);
+      l -= 4; // length of basename
+   }
+   else
+   {
+      Src = StrNDup(argsrc,l+4);
+      memmove(Src+l,".as9",4); // add default extension
+   }
+
+   // set static filenames
+
+   memmove(Pre,Src,l);
+   memmove(Lst,Src,l);
+   memmove(Opt,Src,l);
+
+   // add extensions
+
+   memmove(Pre+l,".pp" ,3);
+   memmove(Lst+l,".lst",4);
+   memmove(Opt+l,".opt",4);
 
    printf("\n");
    printf("*******************************************\n");
