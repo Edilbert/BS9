@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 23-Jan-2020
+Version: 09-Feb-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -66,6 +66,8 @@ LABEL   LDX  #Value            define LABEL for current PC
 TXTPTR  = $21b8                define constant TXTPTR
 OLDPTR  EQU $21ba              define constant OLDPTR
 CURRENT SET 5                  define variable CURRENT
+LABEL   ENUM value             define label with value
+LABEL   ENUM                   use last ENUM value + 1
 
 Labels and constants can have only one value.
 Variables, which get their value assigned with "SET",
@@ -277,15 +279,27 @@ void *AssertAlloc(void *p)
    exit(1);
 }
 
+// ***********
+// MallocOrDie
+// ***********
+
 void *MallocOrDie(size_t size)
 {
    return AssertAlloc(calloc(size,1));
 }
 
+// ************
+// ReallocOrDie
+// ************
+
 void *ReallocOrDie(void *p, size_t size)
 {
    return AssertAlloc(realloc(p, size));
 }
+
+// ************
+// AssertFileOp
+// ************
 
 void *AssertFileOp(void *p, const char *msg)
 {
@@ -293,6 +307,10 @@ void *AssertFileOp(void *p, const char *msg)
    perror(msg);
    exit(1);
 }
+
+// *******
+// StrNDup
+// *******
 
 void *StrNDup(void *src, unsigned int n)
 {
@@ -335,8 +353,8 @@ enum Addressing_Mode
 
 struct MatStruct
 {
-   char Mne[6];
-   int  Opc[ADMODES];
+   char Mne[6];       // Mnemonic
+   int  Opc[ADMODES]; // Opcodes
 } Mat[] =
 {
 //             0       1      2      3      4      5      6      7
@@ -609,77 +627,79 @@ struct PushStruct
 
 #define UNDEF (int) 0xff0000
 
-int SkipHex    =  0; // Switch on with -x
-int Debug      =  0; // Switch on with -d
-int LiNo       =  0; // Line number of current file
-int WithLiNo   =  0; // Print line numbers in listing if set
-int TotalLiNo  =  0; // Total line number
-int Preprocess =  0; // Print preprocessed source file <file.pp>
-int ERRMAX     = 10; // Stop assemby after ERRMAX errors
-int ErrNum;
-int MacLev;
-int ModuleStart;       // address of a module
-int ModuleTrigger;     // start of module
-int FormLn;            // lines per page [inactive]
-int DP;                // current direct page
-int CodeStyle;         // 1: Operand has no spaces
+int SkipHex    =  0; // switch on with -x
+int Debug      =  0; // switch on with -d
+int LiNo       =  0; // line number of current file
+int WithLiNo   =  0; // print line numbers in listing if set
+int TotalLiNo  =  0; // total line number
+int Preprocess =  0; // print preprocessed source file <file.pp>
+int ERRMAX     = 10; // stop assemby after ERRMAX errors
+int EnumValue  = -1; // last used ENUM value
+int ErrNum;          // error count
+int MacLev;          // macro nesting level
+int ModuleStart;     // address of a module
+int ModuleTrigger;   // start of module
+int FormLn;          // lines per page [inactive]
+int DP;              // current direct page
+int CodeStyle;       // 1: operand has no spaces (old form)
+int MneIndex;        // current mnemonic
 
-int MneIndex;          // Current mnemonic
+int oc;              // op code
+int pb;              // post byte
+int am;              // address mode
+int il;              // instruction length
+int ol;              // opcode length
+int pl;              // postbyte length
+int ql;              // operand length
+int pc = -1;         // program counter
+int bss;             // bss counter
+int nops;            // snychronisation nops
 
-int oc;      // op code
-int pb;      // post byte
-int am;      // address mode
-int il;      // instruction length
-int ol;      // opcode length
-int pl;      // postbyte length
-int ql;      // operand length
-int pc = -1; // program counter
-int bss;     // bss counter
-int nops;    // snychronisation nops
-int Phase;
-int IfLevel;
-int Skipping;
-int SkipLine[10];
-int ForcedEnd;    // Triggered by END command
-int IgnoreCase;   // 1: Ignore case for symbols
-int ForcedMode;   // -1: direct page, +1: extended
-int optc;         // count optimization messages
-int Preset;       // value for initialisation
+int Phase;           // phase or pass of 2-pass assembler
+int IfLevel;         // if nesting level
+int Skipping;        // inside 'false' branch
+int SkipLine[10];    // skipping value for each nesting level
+int ForcedEnd;       // Triggered by END command
+int IgnoreCase;      // 1: Ignore case for symbols
+int ForcedMode;      // -1: direct page, +1: extended
+int optc;            // count optimization messages
+int Preset;          // value for initialisation
 
 // Filenames
 
 #define FNSIZE 256
 
-char *Src;               // source file
-char  Lst[FNSIZE];       // list file
-char  Pre[FNSIZE];       // preprocessed file
-char  Opt[FNSIZE];       // optimzation hints
+char *Src;           // source file
+char  Lst[FNSIZE];   // list file
+char  Pre[FNSIZE];   // preprocessed file
+char  Opt[FNSIZE];   // optimzation hints
 
-int GenStart = 0x10000 ; // Lowest assemble address
-int GenEnd   =       0 ; //Highest assemble address
+int GenStart = 0x10000 ; //  Lowest assemble address
+int GenEnd   =       0 ; // Highest assemble address
 
 // These arrays hold the parameter for storage files
 
 #define SFMAX 20
-int SFA[SFMAX];         // start address of data block
-int SFL[SFMAX];         // length of data block
-char *SFF[SFMAX];       // filename
-int SFE[SFMAX];         // execution start address
-int SFR[SFMAX];         // number of records in a S19 file
-int SFT[SFMAX];         // file format
+int SFA[SFMAX];      // start address of data block
+int SFL[SFMAX];      // length of data block
+char *SFF[SFMAX];    // filename
+int SFE[SFMAX];      // execution start address
+int SFR[SFMAX];      // number of records in a S19 file
+int SFT[SFMAX];      // file format
 
-int StoreCount = 0;
+int StoreCount = 0;  // number of segments to store
 
 enum OutfileFormat { BINARY, SRECORD };
 
-// The size is one page more than 64K because program, counter
+// The array ROM receives the assembled code.
+// The size is one page more than 64K because program counter
 // overflows are detected after using the new value.
 // So references to pc + n do no harm if pc is near the boundary
 
 unsigned char ROM[0x10100]; // binary
 
-// A two pass assembler must set the address length in phase 1
-// These are stored in ADL, in order to avoid phase errors
+// A two pass assembler must set the cwinstruction length in phase 1
+// These values are stored in ADL, in order to avoid phase errors
 //  0: no code generated for this address
 // >0: instruction length locked
 // <0: data byte or not start byte of instruction
@@ -692,6 +712,8 @@ FILE *df; // debug        file
 FILE *pf; // preprocessed file
 FILE *of; // object       file
 
+// organize nesting of include files
+
 struct IncludeStackStruct
 {
    FILE *fp;
@@ -703,14 +725,17 @@ int IncludeLevel;
 
 #define ML 256
 
-int ArgPtr[10];
+int ArgPtr[10];              // macro argument pointer
 char Line[ML];               // source line
-char Label[ML];
-char MacArgs[ML];
+char Label[ML];              // current label
+char MacArgs[ML];            // macro arguments
 unsigned char Operand[ML];   // binary operand
 char OpText[ML];             // operand source
 char Comment[ML];            // comment source
-char ModuleName[ML];
+char ModuleName[ML];         // current source name
+
+// state of label definition
+// defined or BSS or defined by position
 
 #define LDEF 1
 #define LBSS 2
@@ -723,15 +748,20 @@ struct LabelStruct
    char *Name;     // Label name - case sensitive
    int   Address;  // Range 0 - 65536
    int   Bytes;    // Length of object (string for example)
-   int   Locked;   // Defined from command line argument
+   int   Locked;   // Cannot change value
    int   NumRef;   // # of references
    int  *Ref;      // list of references
    int  *Att;      // list of attributes
 } lab[MAXLAB];
 
-int Labels;
+int Labels;        // number of labels
 
-#define MAXMAC 64
+// maximum number of macros
+
+#define MAXMAC 200
+
+// special character in macros used to mark argument
+
 #define CHAMAC '`'
 
 struct MacroStruct
@@ -744,8 +774,11 @@ struct MacroStruct
 } Mac[MAXMAC];
 
 char *MacPtr[MAXMAC]; // pointer inside macro body
-int Macros;                 // total number of macros
+int Macros;           // total number of macros
 
+// *********
+// SkipSpace
+// *********
 
 char *SkipSpace(char *p)
 {
@@ -900,6 +933,8 @@ void ErrorLine(char *p)
 
 }
 
+// forward declaration
+
 void ListSymbols(FILE *lf, int n, int lb, int ub);
 
 
@@ -987,6 +1022,10 @@ void PrintOC(int v)
    else if (  ql == 1) fprintf(lf,"   %2.2x",v&0xff);
    else              fprintf(lf,"     ");
 }
+
+// *********
+// PrintLine
+// *********
 
 void PrintLine(void)
 {
@@ -1190,10 +1229,30 @@ void ExtractOpText(char *p)
    // Extract Comment
 }
 
+#define LABTYPES 4
+struct LabelDefStruct
+{
+   char Name[5];
+   int  Length;
+   int  Type;
+} LabDef[LABTYPES] =
+{
+   {"SET" ,3,-1},
+   {"EQU" ,3, 0},
+   {"="   ,1, 0},
+   {"ENUM",4, 1}
+};
+
+
+// ***********
+// DefineLabel
+// ***********
 
 char *DefineLabel(char *p, int *val, int Locked)
 {
-   int j,l,v,var;
+   int i,j,l,v,var;
+
+   *val = UNDEF; // preset
 
    if (Labels > MAXLAB -2)
    {
@@ -1206,17 +1265,21 @@ char *DefineLabel(char *p, int *val, int Locked)
    l = strlen(Label);
    p = SkipSpace(p);
 
-   // check for definition of variables
+   // parse definition of constants or variables
 
-   var = strcmpword(p,"SET") == 0;
+   for (i=0 ; i < LABTYPES ; ++i)
+   {
+      if (!strcmpword(p,LabDef[i].Name))
+      {
+         var = LabDef[i].Type;     // type
+         break;
+      }
+   }
 
-   // assignment with SET, EQU or =
-
-   if (strcmpword(p,"EQU") == 0 || *p == '=' || var)
+   if (i < LABTYPES) // label definition
    {
       if (df) fprintf(df,"LABVAL:%s:\n",p);
-      if (*p == '=') p++;
-      else           p+=4; // length of "SET" or "EQU" + delimiter
+      p += LabDef[i].Length;   // add keyword length
       j = LabelIndex(Label);
       if (j < 0)
       {
@@ -1229,21 +1292,45 @@ char *DefineLabel(char *p, int *val, int Locked)
       }
       lab[j].Ref[0] = LiNo;
       lab[j].Att[0] = LDEF;
+
       ExtractOpText(p);
-      p += strlen(p);
-      EvalOperand(OpText,&v,0);
-      if (lab[j].Address == UNDEF || var) lab[j].Address = v;
-      else if (lab[j].Address != v && !lab[j].Locked)
+      if (OpText[0])
+      {
+         p += strlen(p);
+         EvalOperand(OpText,&v,0);
+         if (lab[j].Address == UNDEF || var) lab[j].Address = v;
+         else if (lab[j].Address != v && !lab[j].Locked)
+         {
+            ++ErrNum;
+            ErrorLine(p);
+            ErrorMsg("*Multiple assignments for label [%s]\n"
+                     "1st. value = $%4.4x   2nd. value = $%4.4x\n",
+                     Label, lab[j].Address, v);
+            exit(1);
+         }
+         *val = v;
+         if (LabDef[i].Type > 0) EnumValue = v;
+         if (Locked) lab[j].Locked = Locked;
+      }
+      else if (LabDef[i].Type > 0) // ENUM
+      {
+         *val = ++EnumValue;
+         if (lab[j].Address == UNDEF) lab[j].Address = *val;
+         else if (lab[j].Address != *val)
+         {
+            ++ErrNum;
+            ErrorLine(p);
+            ErrorMsg("ENUM phase error\n");
+            exit(1);
+         }
+      }
+      else
       {
          ++ErrNum;
          ErrorLine(p);
-         ErrorMsg("*Multiple assignments for label [%s]\n"
-                  "1st. value = $%4.4x   2nd. value = $%4.4x\n",
-                  Label, lab[j].Address, v);
+         ErrorMsg("Missing operand\n");
          exit(1);
       }
-      *val = v;
-      if (Locked) lab[j].Locked = Locked;
    }
    else if (!strcmpword(p,".BSS"))
    {
@@ -3622,11 +3709,13 @@ void Phase1(void)
 
 void Phase2(void)
 {
-    int l,Eof;
+   int l,Eof;
 
-   Phase =  2;
-   pc    = -1;
-   ForcedEnd = 0;
+   Phase     =  2;
+   pc        = -1;
+   EnumValue = -1;
+   ForcedEnd =  0;
+
    if (IfLevel)
    {
       printf("\n*** Error in conditional assembly ***\n");
@@ -3926,7 +4015,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 23-Jan-2020         *\n");
+   printf("* Bit Shift Assembler 09-Feb-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
