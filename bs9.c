@@ -1237,9 +1237,9 @@ struct LabelDefStruct
    int  Type;
 } LabDef[LABTYPES] =
 {
-   {"SET" ,3,-1},
-   {"EQU" ,3, 0},
    {"="   ,1, 0},
+   {"EQU" ,3, 0},
+   {"SET" ,3,-1},
    {"ENUM",4, 1}
 };
 
@@ -1250,7 +1250,7 @@ struct LabelDefStruct
 
 char *DefineLabel(char *p, int *val, int Locked)
 {
-   int i,j,l,v,var;
+   int i,j,l,v;
 
    *val = UNDEF; // preset
 
@@ -1269,17 +1269,15 @@ char *DefineLabel(char *p, int *val, int Locked)
 
    for (i=0 ; i < LABTYPES ; ++i)
    {
-      if (!strcmpword(p,LabDef[i].Name))
-      {
-         var = LabDef[i].Type;     // type
-         break;
-      }
+      if (*p == '=' || !strcmpword(p,LabDef[i].Name)) break;
    }
 
    if (i < LABTYPES) // label definition
    {
       if (df) fprintf(df,"LABVAL:%s:\n",p);
+      if (df) fprintf(df,"Length:%d Index:%d\n",LabDef[i].Length,i);
       p += LabDef[i].Length;   // add keyword length
+      if (df) fprintf(df,"---VAL:%s:\n",p);
       j = LabelIndex(Label);
       if (j < 0)
       {
@@ -1294,11 +1292,13 @@ char *DefineLabel(char *p, int *val, int Locked)
       lab[j].Att[0] = LDEF;
 
       ExtractOpText(p);
+      if (df) fprintf(df,"OpText = [%s]\n",OpText);
       if (OpText[0])
       {
          p += strlen(p);
          EvalOperand(OpText,&v,0);
-         if (lab[j].Address == UNDEF || var) lab[j].Address = v;
+         if (lab[j].Address == UNDEF || LabDef[i].Type == 0)
+             lab[j].Address = v;
          else if (lab[j].Address != v && !lab[j].Locked)
          {
             ++ErrNum;
@@ -3596,7 +3596,7 @@ void ParseLine(char *cp)
             if (cp == start) cp = DefineLabel(cp,&v,0);
             else
             {
-               if (StrKey(cp,"SET") ||
+               if (StrKey(cp,"SET") || StrKey(cp,"ENUM") ||
                    StrKey(cp,"EQU") || strchr(cp,'='))
                   cp = DefineLabel(cp,&v,0);
             }
