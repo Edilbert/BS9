@@ -244,6 +244,10 @@ forum64 or the forum of the VzEkC.
 
 #define MAX_STR 1024
 
+// forward references
+
+void AddLabel(char *p);
+
 // **********
 // StrCaseStr
 // **********
@@ -1398,27 +1402,6 @@ char *DefineLabel(char *p, int *val, int Locked)
 }
 
 
-void AddLabel(char *p)
-{
-   int l;
-
-   if (Labels > MAXLAB -2)
-   {
-      ++ErrNum;
-      ErrorMsg("Too many labels (> %d)\n",MAXLAB);
-      exit(1);
-   }
-   l = strlen(p);
-   lab[Labels].Address = UNDEF;
-   lab[Labels].Name = StrNDup(p,l);
-   lab[Labels].Ref = MallocOrDie(sizeof(int));
-   lab[Labels].Att = MallocOrDie(sizeof(int));
-   lab[Labels].Ref[0] = LiNo;
-   lab[Labels].Att[0] = 0;
-   Labels++;
-}
-
-
 void SymRefs(int i)
 {
    int n;
@@ -2425,7 +2408,7 @@ struct PseudoStruct PseudoTab[] =
    {"WORD"   , &ps_word   }
 };
 
-#define PSEUDOS (int)(sizeof(PseudoTab) / sizeof(struct PseudoStruct))
+#define PSEUDOS 24
 
 char *CheckPseudo(char *p)
 {
@@ -2448,6 +2431,50 @@ char *CheckPseudo(char *p)
       exit(1);
    }
    return p;
+}
+
+
+void AddLabel(char *p)
+{
+   int i,l;
+
+   if (Labels > MAXLAB -2)
+   {
+      ++ErrNum;
+      ErrorMsg("Too many labels (> %d)\n",MAXLAB);
+      exit(1);
+   }
+   l = strlen(p);
+
+   // test for mnemonic
+
+   for (i=0 ; i < DimOp ; ++i)
+   {
+      if (!StrCaseCmp(p,Mat[i].Mne))
+      {
+         ErrorMsg("Use of reserved mnemonic <%s> as label or operand\n",p);
+         exit(1);
+      }
+   }
+
+   // test for pseudos
+
+   for (i=0 ; i < PSEUDOS ; ++i)
+   {
+      if (!StrCaseCmp(p,PseudoTab[i].keyword))
+      {
+         ErrorMsg("Use of reserved keyword <%s> as label or operand\n",p);
+         exit(1);
+      }
+   }
+
+   lab[Labels].Address = UNDEF;
+   lab[Labels].Name = StrNDup(p,l);
+   lab[Labels].Ref = MallocOrDie(sizeof(int));
+   lab[Labels].Att = MallocOrDie(sizeof(int));
+   lab[Labels].Ref[0] = LiNo;
+   lab[Labels].Att[0] = 0;
+   Labels++;
 }
 
 
