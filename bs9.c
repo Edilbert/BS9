@@ -840,7 +840,7 @@ char *GetSymbol(char *p, char *s)
 char *GetMacroArg(char *p, char *s)
 {
    p = SkipSpace(p);
-   while (*p && *p != ' ' && *p != ',') *s++ = *p++;
+   while (*p && *p != ',' && *p != ')') *s++ = *p++;
    *s = 0;
    return p;
 }
@@ -3277,6 +3277,14 @@ char *GenerateCode(char *p)
    return p;
 }
 
+#define MAXARGS 10
+
+// *************
+// ScanArguments
+// *************
+
+// for nargs == MAXARGS this is a recording call
+// otherwise it's an expansion call
 
 int ScanArguments(char *p, char *args, int ptr[], int nargs)
 {
@@ -3291,7 +3299,8 @@ int ScanArguments(char *p, char *args, int ptr[], int nargs)
       if (df) fprintf(df,"Arg #%d <%s>\n",n,p);
       p = SkipSpace(p);
       if (*p == ')') break; // end of list
-      p = GetMacroArg(p,sym);
+      if (nargs == MAXARGS) p = GetSymbol(p,sym);
+      else                  p = GetMacroArg(p,sym);
       l = strlen(sym);
       if (l) memmove(args+ptr[n],sym,l+1);
       else   args[ptr[n]] = 0;
@@ -3299,7 +3308,7 @@ int ScanArguments(char *p, char *args, int ptr[], int nargs)
       ptr[n] = ptr[n-1] + l + 1;
       p = SkipSpace(p);
       if (*p == ')') break; // end of list
-      if (*p != ',' && n < nargs-1)
+      if (*p != ',' && n < nargs-1 && nargs < MAXARGS)
       {
          ++ErrNum;
          ErrorMsg("Syntax error in macro definition '%c'\n",*p);
@@ -3385,7 +3394,7 @@ void RecordMacro(char *p)
 
    if (*p == '(') ++p;
    if (mf) an = ScanArgs(p,args,ap);
-   else    an = ScanArguments(p+1,args,ap,10);
+   else    an = ScanArguments(p,args,ap,MAXARGS);
    if (df)
    {
       fprintf(df,"RecordMacro: %s(",Macro);
