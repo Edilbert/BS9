@@ -1049,8 +1049,8 @@ void PrintByteLine(int b)
 {
    if (Phase < 2) return;
    PrintLiNo();
-   fprintf(lf,"  %2.2x",b);
-   fprintf(lf,"          %s\n",Line);
+   fprintf(lf,"       %2.2x",b);
+   fprintf(lf,"         %s\n",Line);
 }
 
 void PrintWordLine(int w)
