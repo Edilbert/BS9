@@ -3062,6 +3062,12 @@ char *GenerateCode(char *p)
       ol = 1 + (oc > 255);
       ql = RegisterSize(MneIndex);
       il = ol + ql;
+      if (Phase == 2 && v == UNDEF)
+      {
+         ErrorLine(p);
+         ErrorMsg("Undefined immediate value\n");
+         exit(1);
+      }
       if (ql == 1 && Phase == 2 && (v < -128 || v > 255))
       {
          ErrorLine(p);
