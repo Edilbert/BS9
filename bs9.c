@@ -78,10 +78,11 @@ at the first column.
 Examples of pseudo opcodes (directives):
 ========================================
 ORG  $E000                     set program counter
-STORE BASIC_ROM,$2000,"basic.rom" write binary image file "basic.rom"
-STORE BASIC_ROM,$2000,"basic.rom",bin,1 write binary image, headed by load address
-STORE BASIC_ROM,$2000,"basic.s19",s19 write binary file in Motorola S-Record format
-STORE BASIC_ROM,$2000,"basic.s19",s19,Main write binary and provide execution start address
+STORE START,$2000,"basic.rom" write binary image file "basic.rom"
+STORE START,$2000,"basic.rom",bin,1 write binary image, headed by load address
+STORE START,$2000,"basic.s19",s19 write binary file in Motorola S-Record format
+STORE START,$2000,"basic.s19",s19,Main write binary and provide execution start address
+LOAD  START,"image.bin"        load binary file to START and following addresses
 BITS . . * . * . . .           stores a byte from 8 bit symbols
 BYTE $20,"Example",0           stores a series of byte data
 WORD LAB_10, WriteTape,$0200   stores a series of word data
@@ -2068,6 +2069,54 @@ char *ParseStoreData(char *p)
 }
 
 
+char *ParseLoadData(char *p)
+{
+   int Start,Size;
+   char *Filename,*EndPtr;
+   FILE *lp;
+
+   if (Phase < 2) return p + strlen(p);
+   p = EvalOperand(p,&Start,0);
+   if (Start < 0 || Start > 0xffff)
+   {
+      ErrorMsg("Illegal start address for LOAD %d\n",Start);
+      exit(1);
+   }
+   p = NeedChar(p,',');
+   if (!p)
+   {
+      ErrorMsg("Missing ',' after start address\n");
+      exit(1);
+   }
+   p = NeedChar(p+1,'"');
+   if (!p)
+   {
+      ErrorMsg("Missing quote for filename\n");
+      exit(1);
+   }
+   EndPtr = ++p;
+   while (*EndPtr != '\0' && *EndPtr != '"') ++EndPtr;
+   Filename = StrNDup(p, EndPtr - p);
+   if (df) fprintf(df,"Loading %4.4x <%s>\n",Start,Filename);
+   PrintLine();
+   lp = fopen(Filename,"rb");
+   AssertFileOp(lp,"Could not LOAD <%s>\n");
+   fseek(lp,0,SEEK_END);
+   Size = ftell(lp);
+   rewind(lp);
+   if (Start + Size > 0x10000)
+   {
+      ErrorMsg("LOADING %4.4x to %4.4x violates 64K size\n",
+         Start,Start+Size);
+      exit(1);
+   }
+   fread(ROM+Start,Size,1,lp);
+   fclose(lp);
+   p += strlen(p);
+   return p;
+}
+
+
 char *ParseBSSData(char *p)
 {
    int m;
@@ -2312,6 +2361,7 @@ char *ps_case(char *p)   { PrintPC(); return ParseCaseData(p); }
 char *ps_bss(char *p)    { PrintPC(); return ParseBSSData(p); }
 char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
 char *ps_store(char *p)  { PrintPC(); return ParseStoreData(p); }
+char *ps_load(char *p)   { PrintPC(); return ParseLoadData(p); }
 char *ps_include(char *p){ PrintPC(); return IncludeFile(p); }
 char *ps_end(char *p)    { PrintLine(); ForcedEnd = 1; return p; }
 char *ps_ignore(char *p) { PrintLine(); return p; }
@@ -2404,11 +2454,12 @@ struct PseudoStruct PseudoTab[] =
    {"SETDP"  , &ps_setdp  },
    {"SIZE"   , &ps_size   },
    {"STORE"  , &ps_store  },
+   {"LOAD"   , &ps_load   },
    {"TTL"    , &ps_ignore },
    {"WORD"   , &ps_word   }
 };
 
-#define PSEUDOS 24
+#define PSEUDOS (sizeof(PseudoTab) / sizeof(struct PseudoStruct))
 
 char *CheckPseudo(char *p)
 {
