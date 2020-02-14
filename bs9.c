@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 09-Feb-2020
+Version: 14-Feb-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -84,6 +84,8 @@ STORE START,$2000,"basic.s19",s19 write binary file in Motorola S-Record format
 STORE START,$2000,"basic.s19",s19,Main write binary and provide execution start address
 LOAD  START,"image.bin"        load binary file to START and following addresses
 LOAD  "image.bin"              load binary file starting at current address
+LIST +                         switch on  assembler listing
+LIST -                         switch off assembler listing
 BITS . . * . * . . .           stores a byte from 8 bit symbols
 BYTE $20,"Example",0           stores a series of byte data
 WORD LAB_10, WriteTape,$0200   stores a series of word data
@@ -4197,7 +4199,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 09-Feb-2020         *\n");
+   printf("* Bit Shift Assembler 14-Feb-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
