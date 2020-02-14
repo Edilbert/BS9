@@ -83,6 +83,7 @@ STORE START,$2000,"basic.rom",bin,1 write binary image, headed by load address
 STORE START,$2000,"basic.s19",s19 write binary file in Motorola S-Record format
 STORE START,$2000,"basic.s19",s19,Main write binary and provide execution start address
 LOAD  START,"image.bin"        load binary file to START and following addresses
+LOAD  "image.bin"              load binary file starting at current address
 BITS . . * . * . . .           stores a byte from 8 bit symbols
 BYTE $20,"Example",0           stores a series of byte data
 WORD LAB_10, WriteTape,$0200   stores a series of word data
@@ -2079,7 +2080,8 @@ char *ParseStoreData(char *p)
    SFE[StoreCount] = Entry;
    SFF[StoreCount] = Filename;
    SFT[StoreCount] = FileFormat;
-   if (df) fprintf(df,"Storing %4.4x - %4.4x <%s>, %s format\n",Start,Start+Length-1,Filename,FileFormat ? "S19" : "binary");
+   if (df) fprintf(df,"Storing %4.4x - %4.4x <%s>, %s format\n",
+           Start,Start+Length-1,Filename,FileFormat ? "S19" : "binary");
    if (StoreCount < SFMAX) ++StoreCount;
    else
    {
@@ -2094,28 +2096,36 @@ char *ParseStoreData(char *p)
 
 char *ParseLoadData(char *p)
 {
-   int i,Start,Size;
+   int i,Start,Size,Advance;
    char *Filename,*EndPtr;
    FILE *lp;
 
-   if (Phase < 2) return p + strlen(p);
-   p = EvalOperand(p,&Start,0);
-   if (Start < 0 || Start > 0xffff)
+   p = SkipSpace(p);
+
+   Advance = 1;
+   if (*p == '\"') Start = pc;
+   else
    {
-      ErrorMsg("Illegal start address for LOAD %d\n",Start);
-      exit(1);
-   }
-   p = NeedChar(p,',');
-   if (!p)
-   {
-      ErrorMsg("Missing ',' after start address\n");
-      exit(1);
-   }
-   p = NeedChar(p+1,'"');
-   if (!p)
-   {
-      ErrorMsg("Missing quote for filename\n");
-      exit(1);
+      Advance = 0;
+      p = EvalOperand(p,&Start,0);
+
+      if (Start < 0 || Start > 0xffff)
+      {
+         ErrorMsg("Illegal start address for LOAD %d\n",Start);
+         exit(1);
+      }
+      p = NeedChar(p,',');
+      if (!p)
+      {
+         ErrorMsg("Missing ',' after start address\n");
+         exit(1);
+      }
+      p = NeedChar(p+1,'"');
+      if (!p)
+      {
+         ErrorMsg("Missing quote for filename\n");
+         exit(1);
+      }
    }
    EndPtr = ++p;
    while (*EndPtr != '\0' && *EndPtr != '"') ++EndPtr;
@@ -2133,6 +2143,8 @@ char *ParseLoadData(char *p)
          Start,Start+Size);
       exit(1);
    }
+
+   if (Phase == 2)
    for (i=Start; i < Start+Size ; ++i)
    {
       if (LOCK[i])
@@ -2145,6 +2157,7 @@ char *ParseLoadData(char *p)
    }
    fread(ROM+Start,Size,1,lp);
    fclose(lp);
+   if (Advance) pc += Size;
    p += strlen(p);
    return p;
 }
