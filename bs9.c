@@ -264,6 +264,7 @@ unsigned char LOCK[0x10100]; // binary
 // <0: data byte or not start byte of instruction
 
 int ErrNum;          // error count
+int ListOn = 1;      // listing control
 
 // forward references
 
@@ -999,7 +1000,7 @@ void ErrorMsg(const char *format, ...) {
 
 void PrintLiNo(void)
 {
-   if (WithLiNo && Phase == 2) fprintf(lf,"%5d ",LiNo);
+   if (ListOn && WithLiNo && Phase == 2) fprintf(lf,"%5d ",LiNo);
 }
 
 
@@ -1009,7 +1010,7 @@ void PrintLiNo(void)
 
 void PrintPC(void)
 {
-   if (Phase == 2)
+   if (ListOn && Phase == 2)
    {
       PrintLiNo();
       fprintf(lf,"%4.4x",pc);
@@ -1024,6 +1025,7 @@ void PrintPC(void)
 void PrintOC(int v)
 {
 
+   if (!ListOn) return;
    // special format for 32 bit load
 
    if (oc == 0xcd) // LDQ immediate
@@ -1049,7 +1051,7 @@ void PrintOC(int v)
    else if (nops == 1 && ql == 1) fprintf(lf," %2.2x12",v&0xff);
    else if (  ql == 2) fprintf(lf," %4.4x",v&0xffff);
    else if (  ql == 1) fprintf(lf,"   %2.2x",v&0xff);
-   else              fprintf(lf,"     ");
+   else                fprintf(lf,"     ");
 }
 
 // *********
@@ -1058,21 +1060,21 @@ void PrintOC(int v)
 
 void PrintLine(void)
 {
-   if (Phase < 2) return;
+   if (!ListOn || Phase < 2) return;
    PrintLiNo();
    fprintf(lf,"                  %s\n",Line);
 }
 
 void PrintPCLine(void)
 {
-   if (Phase < 2) return;
+   if (!ListOn || Phase < 2) return;
    PrintPC();
    fprintf(lf,"          %s\n",Line);
 }
 
 void PrintByteLine(int b)
 {
-   if (Phase < 2) return;
+   if (!ListOn || Phase < 2) return;
    PrintLiNo();
    fprintf(lf,"       %2.2x",b);
    fprintf(lf,"         %s\n",Line);
@@ -1080,7 +1082,7 @@ void PrintByteLine(int b)
 
 void PrintWordLine(int w)
 {
-   if (Phase < 2) return;
+   if (!ListOn || Phase < 2) return;
    PrintLiNo();
    fprintf(lf,"%4.4x",w);
    fprintf(lf,"              %s\n",Line);
@@ -1119,7 +1121,22 @@ char *ParseCaseData(char *p)
    else
    {
       ++ErrNum;
-      ErrorMsg("Missing '+' or '-' after .CASE\n");
+      ErrorMsg("Missing '+' or '-' after CASE\n");
+      exit(1);
+   }
+   PrintLine();
+   return p+1;
+}
+
+char *ParseListOption(char *p)
+{
+   p = SkipSpace(p);
+        if (*p == '+') ListOn = 1;
+   else if (*p == '-') ListOn = 0;
+   else
+   {
+      ++ErrNum;
+      ErrorMsg("Missing '+' or '-' after LIST\n");
       exit(1);
    }
    PrintLine();
@@ -1156,7 +1173,7 @@ char *SetBSS(char *p)
    }
    p = EvalOperand(p+1,&bss,0);
    if (df) fprintf(df,"BSS = %4.4x\n",bss);
-   if (Phase == 2)
+   if (ListOn && Phase == 2)
    {
       PrintLiNo();
       fprintf(lf,"%4.4x          %s\n",bss,Line);
@@ -1568,10 +1585,13 @@ char *ParseRealData(char *p)
    if (Phase == 2)
    {
       for (i=0 ; i < mansize+1 ; ++i) Put(pc+i,Operand[i],p);
-      PrintPC();
-      fprintf(lf," %2.2x %2.2x%2.2x%2.2x  ",
-         Operand[0],Operand[1],Operand[2],Operand[3]);
-      fprintf(lf," %s\n",Line);
+      if (ListOn)
+      {
+         PrintPC();
+         fprintf(lf," %2.2x %2.2x%2.2x%2.2x  ",
+            Operand[0],Operand[1],Operand[2],Operand[3]);
+         fprintf(lf," %s\n",Line);
+      }
    }
    pc += mansize+1;
    return p + strlen(p);;
@@ -1907,11 +1927,15 @@ char *ParseWordData(char *p)
       for (i=0 ; i < l ; ++i)
       {
          Put(pc+i,ByteBuffer[i],p);
-         if (i == 0 || i == 2) fprintf(lf," %2.2x%2.2x",ByteBuffer[i],ByteBuffer[i+1]);
+         if (ListOn && (i == 0 || i == 2))
+            fprintf(lf," %2.2x%2.2x",ByteBuffer[i],ByteBuffer[i+1]);
       }
-      if (l == 2) fprintf(lf,"        ");
-      else        fprintf(lf,"   ");
-      fprintf(lf," %s\n",Line);
+      if (ListOn)
+      {
+         if (l == 2) fprintf(lf,"        ");
+         else        fprintf(lf,"   ");
+         fprintf(lf," %s\n",Line);
+      }
    }
    pc += l;
 
@@ -1940,14 +1964,17 @@ char *ParseFillData(char *p)
    if (Phase == 2)
    {
       for (i=0 ; i < m ; ++i) Put(pc+i,v,p);
-      PrintPC();
-      if (m > 0) fprintf(lf," %2.2x",v);
-      else       fprintf(lf,"   ");
-      if (m > 1) fprintf(lf," %2.2x",v);
-      else       fprintf(lf,"   ");
-      if (m > 2) fprintf(lf," %2.2x",v);
-      else       fprintf(lf,"   ");
-      fprintf(lf," %s ; %d bytes\n",Line,m);
+      if (ListOn)
+      {
+         PrintPC();
+         if (m > 0) fprintf(lf," %2.2x",v);
+         else       fprintf(lf,"   ");
+         if (m > 1) fprintf(lf," %2.2x",v);
+         else       fprintf(lf,"   ");
+         if (m > 2) fprintf(lf," %2.2x",v);
+         else       fprintf(lf,"   ");
+         fprintf(lf," %s ; %d bytes\n",Line,m);
+      }
    }
    pc += m;
    p += strlen(p);
@@ -1960,7 +1987,7 @@ char *ListSizeInfo(char *p)
    p += strlen(p);
 
    if (!ModuleStart) return p;
-   if (Phase == 2)
+   if (ListOn && Phase == 2)
    {
       PrintPC();
       fprintf(lf,"              %s",Line);
@@ -2173,7 +2200,7 @@ char *ParseBSSData(char *p)
       ErrorMsg("Illegal BSS size %d\n",m);
       exit(1);
    }
-   if (Phase == 2)
+   if (ListOn && Phase == 2)
    {
       PrintLiNo();
       fprintf(lf,"%4.4x             ",bss);
@@ -2200,7 +2227,7 @@ char *ParseBitData(char *p)
          exit(1);
       }
    }
-   if (Phase == 2)
+   if (ListOn && Phase == 2)
    {
       PrintPC();
       Put(pc,v,p);
@@ -2232,11 +2259,14 @@ char *ParseCmapData(char *p)
    }
    if (Phase == 2)
    {
-      PrintPC();
+      if (ListOn) PrintPC();
       if (scanline < 0) Put(pc,v,p);
       else Put(pc+2*scanline-7,v,p);
-      fprintf(lf," %2.2x       ",v);
-      fprintf(lf,"%s\n",Line);
+      if (ListOn)
+      {
+         fprintf(lf," %2.2x       ",v);
+         fprintf(lf,"%s\n",Line);
+      }
    }
    ++pc;
    return p + strlen(p);
@@ -2340,10 +2370,13 @@ char *ParseByteData(char *p)
       for (i=0 ; i < l ; ++i)
       {
          Put(pc+i,ByteBuffer[i],p);
-         if (i < 4) fprintf(lf," %2.2x",ByteBuffer[i]);
+         if (ListOn && i < 4) fprintf(lf," %2.2x",ByteBuffer[i]);
       }
-      for (i=l ; i < 4 ; ++i) fprintf(lf,"   ");
-      fprintf(lf,"  %s\n",Line);
+      if (ListOn)
+      {
+         for (i=l ; i < 4 ; ++i) fprintf(lf,"   ");
+         fprintf(lf,"  %s\n",Line);
+      }
    }
    pc += l;
    return p;
@@ -2385,10 +2418,13 @@ char *ParseStringData(char *p)
       for (i=0 ; i < l ; ++i)
       {
          Put(pc+i,ByteBuffer[i],p);
-         if (i < 4) fprintf(lf," %2.2x",ByteBuffer[i]);
+         if (ListOn && i < 4) fprintf(lf," %2.2x",ByteBuffer[i]);
       }
-      for (i=l ; i < 4 ; ++i) fprintf(lf,"   ");
-      fprintf(lf,"  %s\n",Line);
+      if (ListOn)
+      {
+         for (i=l ; i < 4 ; ++i) fprintf(lf,"   ");
+         fprintf(lf,"  %s\n",Line);
+      }
    }
    pc += l;
    return p;
@@ -2408,6 +2444,7 @@ char *ps_bss(char *p)    { PrintPC(); return ParseBSSData(p); }
 char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
 char *ps_store(char *p)  { PrintPC(); return ParseStoreData(p); }
 char *ps_load(char *p)   { PrintPC(); return ParseLoadData(p); }
+char *ps_list(char *p)   { PrintPC(); return ParseListOption(p); }
 char *ps_include(char *p){ PrintPC(); return IncludeFile(p); }
 char *ps_end(char *p)    { PrintLine(); ForcedEnd = 1; return p; }
 char *ps_ignore(char *p) { PrintLine(); return p; }
@@ -2501,6 +2538,7 @@ struct PseudoStruct PseudoTab[] =
    {"SIZE"   , &ps_size   },
    {"STORE"  , &ps_store  },
    {"LOAD"   , &ps_load   },
+   {"LIST"   , &ps_list   },
    {"TTL"    , &ps_ignore },
    {"WORD"   , &ps_word   }
 };
@@ -2667,7 +2705,7 @@ int CheckCondition(char *p)
          SkipLine[IfLevel] = v == UNDEF || v == 0;
       }
       CheckSkip();
-      if (Phase == 2)
+      if (ListOn && Phase == 2)
       {
          PrintLiNo();
          if (SkipLine[IfLevel])
@@ -2683,7 +2721,7 @@ int CheckCondition(char *p)
       SkipLine[IfLevel] = !SkipLine[IfLevel];
       CheckSkip();
       PrintLiNo();
-      if (Phase == 2) fprintf(lf,"              %s\n",Line);
+      if (ListOn && Phase == 2) fprintf(lf,"              %s\n",Line);
    }
    if (!strcmpword(p,"endif"))
    {
@@ -2691,7 +2729,7 @@ int CheckCondition(char *p)
       r = 1;
       IfLevel--;
       PrintLiNo();
-      if (Phase == 2) fprintf(lf,"              %s\n",Line);
+      if (ListOn && Phase == 2) fprintf(lf,"              %s\n",Line);
       if (IfLevel < 0)
       {
          ++ErrNum;
@@ -3353,12 +3391,15 @@ char *GenerateCode(char *p)
 
       for (i=0 ; i < nops ; ++i) Put(ibi++,0x12,p); // NOP
 
-      PrintPC();
-      PrintOC(v);
-      fprintf(lf," %s",Line);
-      if (nops && df) fprintf(df,"Added %d NOP's\n",nops);
-      if (nops >  1 && lf) fprintf(lf," ; added %d NOP's",nops);
-      if (nops == 1 && lf) fprintf(lf," ; added a NOP");
+      if (ListOn)
+      {
+         PrintPC();
+         PrintOC(v);
+         fprintf(lf," %s",Line);
+         if (nops && df) fprintf(df,"Added %d NOP's\n",nops);
+         if (nops >  1 && lf) fprintf(lf," ; added %d NOP's",nops);
+         if (nops == 1 && lf) fprintf(lf," ; added a NOP");
+      }
    }
 
    if (il < 1 || il > 5)
@@ -3574,13 +3615,13 @@ void RecordMacro(char *p)
    {
       PrintLiNo();
       ++LiNo;
-      fprintf(lf,"            %s\n",Line);
+      if (ListOn) fprintf(lf,"            %s\n",Line);
       do
       {
          fgets(Line,sizeof(Line),sf);
          PrintLiNo();
          ++LiNo;
-         fprintf(lf,"            %s",Line);
+         if (ListOn) fprintf(lf,"            %s",Line);
          if (pf) fprintf(pf,"%s",Line);
       } while (!feof(sf) && !StrCaseStr(Line,"ENDM"));
       LiNo-=2;
@@ -3690,7 +3731,7 @@ void ParseLine(char *cp)
    if (Skipping)
    {
       PrintLiNo();
-      if (Phase == 2) fprintf(lf,"SKIP          %s\n",Line);
+      if (ListOn && Phase == 2) fprintf(lf,"SKIP          %s\n",Line);
       if (df)         fprintf(df,"%5d SKIP          %s\n",LiNo,Line);
       return;
    }
@@ -3748,7 +3789,7 @@ void ParseLine(char *cp)
          if (m < 0 && (*cp == 0 || *cp == ';')) // no code or data
          {
             PrintLiNo();
-            if (Phase == 2)
+            if (ListOn && Phase == 2)
                fprintf(lf,"%4.4x              %s\n",v&0xffff,Line);
             return;
          }
@@ -3769,14 +3810,14 @@ void ParseLine(char *cp)
           (oc == 0x39 || (oc == 0x35 && (ROM[pc-1] & 0x80))))
       {       //  RTS           PULS                   PC
          i = AddressIndex(ModuleStart);
-         if (i >= 0)
+         if (ListOn && i >= 0)
          {
             fprintf(lf,"   ; Size%5d [%s]",pc-ModuleStart,lab[i].Name);
             ModuleStart = 0;
          }
       }
    }
-   if (Phase == 2) fprintf(lf,"\n");
+   if (ListOn && Phase == 2) fprintf(lf,"\n");
    if (*cp == 0 || *cp == ';' || *cp == '*') return; // end of code
 
    printf("<%s>\n",cp);
@@ -3803,7 +3844,7 @@ int CloseInclude(void)
    PrintLiNo();
    if (Phase == 2)
    {
-      fprintf(lf,";                       closed INCLUDE file %s\n",
+      if (ListOn) fprintf(lf,";                       closed INCLUDE file %s\n",
             IncludeStack[IncludeLevel].Src);
       if (ferror(lf)) AssertFileOp(NULL, msg);
    }
@@ -3854,6 +3895,7 @@ void Phase2(void)
    pc        = -1;
    EnumValue = -1;
    ForcedEnd =  0;
+   ListOn    =  1;
 
    if (IfLevel)
    {
@@ -3895,6 +3937,7 @@ void ListSymbols(FILE *lf, int n, int lb, int ub)
    int i,j,l;
    char A;
 
+   if (!ListOn) return;
    for (i=0 ; i < n && i < Labels; ++i)
    if (lab[i].Address >= lb && lab[i].Address <= ub)
    {
