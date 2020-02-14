@@ -245,9 +245,46 @@ forum64 or the forum of the VzEkC.
 
 #define MAX_STR 1024
 
+// The array ROM receives the assembled code.
+// The size is one page more than 64K because program counter
+// overflows are detected after using the new value.
+// So references to pc + n do no harm if pc is near the boundary
+
+unsigned char ROM[0x10100]; // binary
+
+// Used to detect overwrite attempts
+
+unsigned char LOCK[0x10100]; // binary
+
+// A two pass assembler must set the instruction length in phase 1
+// These values are stored in ADL, in order to avoid phase errors
+//  0: no code generated for this address
+// >0: instruction length locked
+// <0: data byte or not start byte of instruction
+
+int ErrNum;          // error count
+
 // forward references
 
 void AddLabel(char *p);
+void ErrorLine(char *p);
+void ErrorMsg(const char *format, ...);
+
+// store code or data into ROM array
+
+void Put(int i, int v, char *p)
+{
+   v &= 0xff;
+   if (LOCK[i] && ROM[i] != v)
+   {
+      ++ErrNum;
+      if (p) ErrorLine(p);
+      ErrorMsg("Tried to overwrite address %4.4x\n",i);
+      exit(1);
+   }
+   ROM[i]  = v;
+   LOCK[i] = 1;
+}
 
 // **********
 // StrCaseStr
@@ -640,7 +677,6 @@ int TotalLiNo  =  0; // total line number
 int Preprocess =  0; // print preprocessed source file <file.pp>
 int ERRMAX     = 10; // stop assemby after ERRMAX errors
 int EnumValue  = -1; // last used ENUM value
-int ErrNum;          // error count
 int MacLev;          // macro nesting level
 int ModuleStart;     // address of a module
 int ModuleTrigger;   // start of module
@@ -695,19 +731,6 @@ int SFT[SFMAX];      // file format
 int StoreCount = 0;  // number of segments to store
 
 enum OutfileFormat { BINARY, SRECORD };
-
-// The array ROM receives the assembled code.
-// The size is one page more than 64K because program counter
-// overflows are detected after using the new value.
-// So references to pc + n do no harm if pc is near the boundary
-
-unsigned char ROM[0x10100]; // binary
-
-// A two pass assembler must set the cwinstruction length in phase 1
-// These values are stored in ADL, in order to avoid phase errors
-//  0: no code generated for this address
-// >0: instruction length locked
-// <0: data byte or not start byte of instruction
 
 signed char ADL[0x10000];
 
@@ -1543,7 +1566,7 @@ char *ParseRealData(char *p)
 
    if (Phase == 2)
    {
-      for (i=0 ; i < mansize+1 ; ++i) ROM[pc+i] = Operand[i];
+      for (i=0 ; i < mansize+1 ; ++i) Put(pc+i,Operand[i],p);
       PrintPC();
       fprintf(lf," %2.2x %2.2x%2.2x%2.2x  ",
          Operand[0],Operand[1],Operand[2],Operand[3]);
@@ -1882,7 +1905,7 @@ char *ParseWordData(char *p)
    {
       for (i=0 ; i < l ; ++i)
       {
-         ROM[pc+i] = ByteBuffer[i];
+         Put(pc+i,ByteBuffer[i],p);
          if (i == 0 || i == 2) fprintf(lf," %2.2x%2.2x",ByteBuffer[i],ByteBuffer[i+1]);
       }
       if (l == 2) fprintf(lf,"        ");
@@ -1915,7 +1938,7 @@ char *ParseFillData(char *p)
    v &= 0xff;
    if (Phase == 2)
    {
-      for (i=0 ; i < m ; ++i) ROM[pc+i] = v;
+      for (i=0 ; i < m ; ++i) Put(pc+i,v,p);
       PrintPC();
       if (m > 0) fprintf(lf," %2.2x",v);
       else       fprintf(lf,"   ");
@@ -2071,7 +2094,7 @@ char *ParseStoreData(char *p)
 
 char *ParseLoadData(char *p)
 {
-   int Start,Size;
+   int i,Start,Size;
    char *Filename,*EndPtr;
    FILE *lp;
 
@@ -2109,6 +2132,16 @@ char *ParseLoadData(char *p)
       ErrorMsg("LOADING %4.4x to %4.4x violates 64K size\n",
          Start,Start+Size);
       exit(1);
+   }
+   for (i=Start; i < Start+Size ; ++i)
+   {
+      if (LOCK[i])
+      {
+         ErrorMsg("LOAD would overwrite defined values\n");
+         ErrorLine(p);
+         exit(1);
+      }
+      LOCK[i] = 1;
    }
    fread(ROM+Start,Size,1,lp);
    fclose(lp);
@@ -2157,7 +2190,7 @@ char *ParseBitData(char *p)
    if (Phase == 2)
    {
       PrintPC();
-      ROM[pc] = v;
+      Put(pc,v,p);
       fprintf(lf," %2.2x       ",v);
       fprintf(lf,"%s\n",Line);
    }
@@ -2187,8 +2220,8 @@ char *ParseCmapData(char *p)
    if (Phase == 2)
    {
       PrintPC();
-      if (scanline < 0) ROM[pc] = v;
-      else ROM[pc+2*scanline-7] = v;
+      if (scanline < 0) Put(pc,v,p);
+      else Put(pc+2*scanline-7,v,p);
       fprintf(lf," %2.2x       ",v);
       fprintf(lf,"%s\n",Line);
    }
@@ -2293,7 +2326,7 @@ char *ParseByteData(char *p)
    {
       for (i=0 ; i < l ; ++i)
       {
-         ROM[pc+i] = ByteBuffer[i];
+         Put(pc+i,ByteBuffer[i],p);
          if (i < 4) fprintf(lf," %2.2x",ByteBuffer[i]);
       }
       for (i=l ; i < 4 ; ++i) fprintf(lf,"   ");
@@ -2338,7 +2371,7 @@ char *ParseStringData(char *p)
    {
       for (i=0 ; i < l ; ++i)
       {
-         ROM[pc+i] = ByteBuffer[i];
+         Put(pc+i,ByteBuffer[i],p);
          if (i < 4) fprintf(lf," %2.2x",ByteBuffer[i]);
       }
       for (i=l ; i < 4 ; ++i) fprintf(lf,"   ");
@@ -2537,11 +2570,11 @@ void SetInstructionLength(char *p)
 
    if (oc >= 0)
    {
-      if (oc < 256)  ROM[pc] = oc;
+      if (oc < 256)  Put(pc,oc,p);
       else
       {
-         ROM[pc  ] = oc >> 8;
-         ROM[pc+1] = oc & 0xff;
+         Put(pc  ,oc >> 8  ,p);
+         Put(pc+1,oc & 0xff,p);
       }
    }
 
@@ -2837,7 +2870,7 @@ int SetPostByte(char *p, int *v)
       {
          ql = 2;
          *v = off-1;
-         ROM[pc] = 0x8d;
+         Put(pc,0x8d,p);
          return (0x8d | ind);
       }
    }
@@ -3270,42 +3303,42 @@ char *GenerateCode(char *p)
 
       if (oc > 255) // two byte opcode
       {
-         ROM[pc  ] = oc >> 8;
-         ROM[pc+1] = oc;
+         Put(pc,oc >> 8,p);
+         Put(pc+1,oc,p);
          ibi = 2;
       }
       else
       {
-         ROM[pc] = oc;
+         Put(pc,oc,p);
          ibi = 1;
       }
 
       if (pb >= 0) // post byte
       {
-         ROM[pc+ibi++] = pb;
+         Put(pc+ibi++,pb,p);
       }
 
       if (ql == 4) // 32 bit value
       {
-         ROM[pc+ibi++] = v >> 24;
-         ROM[pc+ibi++] = v >> 16;
-         ROM[pc+ibi++] = v >>  8;
-         ROM[pc+ibi++] = v;
+         Put(pc+ibi++,v >> 24,p);
+         Put(pc+ibi++,v >> 16,p);
+         Put(pc+ibi++,v >>  8,p);
+         Put(pc+ibi++,v      ,p);;
       }
 
       if (ql == 2) // 16 bit value
       {
    if (df) fprintf(df,"Insert %2.2x %2.2x\n",v>>8,v&255);
-         ROM[pc+ibi++] = v >> 8;
-         ROM[pc+ibi++] = v;
+         Put(pc+ibi++,v >> 8,p);
+         Put(pc+ibi++,v     ,p);
       }
 
       if (ql == 1) //  8 bit value
       {
-         ROM[pc+ibi++] = v;
+         Put(pc+ibi++,v,p);
       }
 
-      for (i=0 ; i < nops ; ++i) ROM[ibi++] = 0x12; // NOP
+      for (i=0 ; i < nops ; ++i) Put(ibi++,0x12,p); // NOP
 
       PrintPC();
       PrintOC(v);
