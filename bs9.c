@@ -1991,13 +1991,12 @@ char *ListSizeInfo(char *p)
    if (!ModuleStart) return p;
    if (ListOn && Phase == 2)
    {
-      PrintPC();
-      fprintf(lf,"              %s",Line);
       i = AddressIndex(ModuleStart);
       if (i >= 0)
       {
-          fprintf(lf," ;%5d [%s]",pc-ModuleStart,lab[i].Name);
-          ModuleStart = 0;
+         fprintf(lf,"              %s",Line);
+         fprintf(lf," ;%5d [%s]",pc-ModuleStart,lab[i].Name);
+         ModuleStart = 0;
       }
       fprintf(lf,"\n");
    }
