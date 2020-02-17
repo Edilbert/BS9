@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 14-Feb-2020
+Version: 17-Feb-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -56,8 +56,8 @@ JMP Lab_10 and JMP LAB_10  jump to different targets!
 
 Directives
 ==========
-CPU_6809 = 1                   allow code for 6809 only
-CPU_6309 = 1                   allow full 6309 instruction set
+CPU = 6809                     allow code for 6809 only
+CPU = 6309                     allow full 6309 instruction set (default)
 
 Labels and Constants
 ====================
@@ -66,8 +66,16 @@ LABEL   LDX  #Value            define LABEL for current PC
 TXTPTR  = $21b8                define constant TXTPTR
 OLDPTR  EQU $21ba              define constant OLDPTR
 CURRENT SET 5                  define variable CURRENT
+
+
+Assign addresses to symbols
+===========================
 LABEL   ENUM value             define label with value
 LABEL   ENUM                   use last ENUM value + 1
+
+& = value                      set start value for BSS segment
+TXTPTR  BSS 2                  assign TXTPTR = &, & += 2
+CURSOR  BSS 1                  assign CURSOR = &, & += 1
 
 Labels and constants can have only one value.
 Variables, which get their value assigned with "SET",
@@ -246,6 +254,8 @@ forum64 or the forum of the VzEkC.
 #include <ctype.h>
 #include <errno.h>
 
+int CPU = 6309; // default: Hitachi 6309
+
 #define MAX_STR 1024
 
 // The array ROM receives the assembled code.
@@ -371,17 +381,6 @@ void *StrNDup(void *src, unsigned int n)
    memmove(dst,src,n);
    return dst;
  }
-
-#define  CPU_6809 0
-#define  CPU_6309 1
-
-int CPU_Type = CPU_6809; // default
-
-const char *CPU_Name[] =
-{
-   "6809"   , // Thomson
-   "6309"     // Hitachi
-};
 
 #define ADMODES 8
 
@@ -644,13 +643,19 @@ int DimOp = DIMOP_6309;
 // register Q is not included, it appears never as operand
 // and is only part of the mnemonic
 
-const char *RegisterNames[] =
+char *Register_6309[] =
 {
-//  6309 register            *   *                             *   *
 //  0   1   2   3   4   5    6   7   8   9    A    B   C   D   E   F
    "D","X","Y","U","S","PC","W","V","A","B","CC","DP","*","*","E","F"
 };
 
+char *Register_6809[] =
+{
+//  0   1   2   3   4   5    6   7   8   9    A    B   C   D   E   F
+   "D","X","Y","U","S","PC","-","-","A","B","CC","DP","*","*","-","-"
+};
+
+char **RegisterNames = Register_6309;
 
 struct PushStruct
 {
@@ -658,16 +663,16 @@ struct PushStruct
    int  Val;
 } PushList[10] =
 {
-   {"CC", 0x01}, // bit 0
-   {"A" , 0x02}, // bit 1
-   {"B" , 0x04}, // bit 2
-   {"D" , 0x06}, // bit 1 and 2
-   {"DP", 0x08}, // bit 3
-   {"X" , 0x10}, // bit 4
-   {"Y" , 0x20}, // bit 5
-   {"S" , 0x40}, // bit 6
-   {"U" , 0x40}, // bit 6
-   {"PC", 0x80}  // bit 7
+   {"CC" , 0x01}, // bit 0
+   {"A"  , 0x02}, // bit 1
+   {"B"  , 0x04}, // bit 2
+   {"D"  , 0x06}, // bit 1 and 2
+   {"DP" , 0x08}, // bit 3
+   {"X"  , 0x10}, // bit 4
+   {"Y"  , 0x20}, // bit 5
+   {"S"  , 0x40}, // bit 6
+   {"U"  , 0x40}, // bit 6
+   {"PC" , 0x80}  // bit 7
 };
 
 
@@ -1071,7 +1076,7 @@ void PrintPCLine(void)
 {
    if (!ListOn || Phase < 2) return;
    PrintPC();
-   fprintf(lf,"          %s\n",Line);
+   fprintf(lf,"              %s\n",Line);
 }
 
 void PrintByteLine(int b)
@@ -2202,12 +2207,37 @@ char *ParseBSSData(char *p)
       exit(1);
    }
    if (ListOn && Phase == 2)
-   {
-      // PrintLiNo();
-      fprintf(lf,"%4.4x             ",bss);
-      fprintf(lf,"%s\n",Line);
-   }
+      fprintf(lf,"%4.4x             %s\n",bss,Line);
    bss += m;
+   return p;
+}
+
+
+char *ParseCPUData(char *p)
+{
+   p = SkipSpace(p);
+   if (*p == '=') ++p;
+   p = EvalOperand(p,&CPU,0);
+   if (CPU == 6809)
+   {
+      DimOp = DIMOP_6809;
+      RegisterNames = Register_6809;
+   }
+   else if (CPU == 6309)
+   {
+      DimOp = DIMOP_6309;
+      RegisterNames = Register_6309;
+   }
+   else
+   {
+      ErrorMsg("Unknown CPU %d - use 6809 or 6309\n",CPU);
+      exit(1);
+   }
+   if (ListOn && Phase == 2)
+   {
+      PrintLiNo();
+      fprintf(lf,"%4d              %s\n",CPU,Line);
+   }
    return p;
 }
 
@@ -2434,22 +2464,23 @@ char *ParseStringData(char *p)
 // Functions for pseudo ops
 
 char *ps_bits(char *p)   { PrintPC(); return ParseBitData(p); }
-char *ps_cmap(char *p)   { PrintPC(); return ParseCmapData(p); }
-char *ps_byte(char *p)   { PrintPC(); return ParseByteData(p); }
-char *ps_word(char *p)   { PrintPC(); return ParseWordData(p); }
-char *ps_string(char *p) { PrintPC(); return ParseStringData(p); }
-char *ps_real(char *p)   { PrintPC(); return ParseRealData(p); }
-char *ps_fill(char *p)   { PrintPC(); return ParseFillData(p); }
-char *ps_case(char *p)   { PrintPC(); return ParseCaseData(p); }
 char *ps_bss(char *p)    { PrintPC(); return ParseBSSData(p); }
-char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
-char *ps_store(char *p)  { PrintPC(); return ParseStoreData(p); }
-char *ps_load(char *p)   { PrintPC(); return ParseLoadData(p); }
-char *ps_list(char *p)   { PrintPC(); return ParseListOption(p); }
-char *ps_include(char *p){ PrintPC(); return IncludeFile(p); }
+char *ps_byte(char *p)   { PrintPC(); return ParseByteData(p); }
+char *ps_case(char *p)   { PrintPC(); return ParseCaseData(p); }
+char *ps_cmap(char *p)   { PrintPC(); return ParseCmapData(p); }
+char *ps_cpu(char *p)    {            return ParseCPUData(p); }
 char *ps_end(char *p)    { PrintLine(); ForcedEnd = 1; return p; }
-char *ps_ignore(char *p) { PrintLine(); return p; }
+char *ps_fill(char *p)   { PrintPC(); return ParseFillData(p); }
 char *ps_formln(char *p) { FormLn = atoi(p); PrintByteLine(FormLn); return p; }
+char *ps_ignore(char *p) { PrintLine(); return p; }
+char *ps_include(char *p){ PrintPC(); return IncludeFile(p); }
+char *ps_list(char *p)   { PrintPC(); return ParseListOption(p); }
+char *ps_load(char *p)   { PrintPC(); return ParseLoadData(p); }
+char *ps_real(char *p)   { PrintPC(); return ParseRealData(p); }
+char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
+char *ps_store(char *p)  {            return ParseStoreData(p); }
+char *ps_string(char *p) { PrintPC(); return ParseStringData(p); }
+char *ps_word(char *p)   { PrintPC(); return ParseWordData(p); }
 
 char *ps_align(char *p)
 {
@@ -2522,24 +2553,25 @@ struct PseudoStruct PseudoTab[] =
    {"BYTE"   , &ps_byte   },
    {"CASE"   , &ps_case   },
    {"CMAP"   , &ps_cmap   },
+   {"CPU"    , &ps_cpu    },
    {"END"    , &ps_end    },
    {"EXTERN" , &ps_ignore },
-   {"FILL"   , &ps_fill   },
-   {"INCLUDE", &ps_include},
-   {"INTERN" , &ps_ignore },
    {"FCB"    , &ps_byte   },
    {"FCC"    , &ps_string },
    {"FDB"    , &ps_word   },
-   {"RMB"    , &ps_rmb    },
+   {"FILL"   , &ps_fill   },
    {"FORMLN" , &ps_formln },
+   {"INCLUDE", &ps_include},
+   {"INTERN" , &ps_ignore },
+   {"LIST"   , &ps_list   },
+   {"LOAD"   , &ps_load   },
    {"ORG"    , &ps_org    },
+   {"RMB"    , &ps_rmb    },
    {"REAL"   , &ps_real   },
    {"SECT"   , &ps_sect   },
    {"SETDP"  , &ps_setdp  },
    {"SIZE"   , &ps_size   },
    {"STORE"  , &ps_store  },
-   {"LOAD"   , &ps_load   },
-   {"LIST"   , &ps_list   },
    {"TTL"    , &ps_ignore },
    {"WORD"   , &ps_word   }
 };
@@ -2774,7 +2806,7 @@ char *ScanRegister(char *p, int *v)
    if (i < 0)
    {
       ErrorLine(p);
-      ErrorMsg("Unknown register name\n");
+      ErrorMsg("Unknown register name or wrong CPU set\n");
       exit(1);
    }
    *v = i;
@@ -2796,7 +2828,7 @@ char *TFMRegister(char *p, int *v)
    if (i < 0)
    {
       ErrorLine(p);
-      ErrorMsg("Illegal register name for TFM\n");
+      ErrorMsg("Illegal register name for TFM or wrong CPU set\n");
       exit(1);
    }
    *v = i;
@@ -3892,11 +3924,12 @@ void Phase2(void)
 {
    int l,Eof;
 
-   Phase     =  2;
-   pc        = -1;
-   EnumValue = -1;
-   ForcedEnd =  0;
-   ListOn    =  1;
+   Phase     =    2;
+   pc        =   -1;
+   EnumValue =   -1;
+   ForcedEnd =    0;
+   ListOn    =    1;
+   CPU       = 6309;
 
    if (IfLevel)
    {
@@ -4198,7 +4231,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 14-Feb-2020         *\n");
+   printf("* Bit Shift Assembler 17-Feb-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
