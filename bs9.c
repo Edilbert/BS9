@@ -96,7 +96,7 @@ INCLUDE "filename"             includes specified file
 END                            stops assembly
 CASE -                         symbols are not case sensitive
 SIZE                           print code size info
-TXTTAB .BSS 2                  define TXTTAB and increase address pointer by 2
+TXTTAB BSS 2                   define TXTTAB and increase address pointer by 2
   * = $E000                    set program counter
   & = $033A                    set BSS address pointer
 ORG   $E000                    set program counter
@@ -1380,7 +1380,7 @@ char *DefineLabel(char *p, int *val, int Locked)
          exit(1);
       }
    }
-   else if (!strcmpword(p,".BSS"))
+   else if (!strcmpword(p,"BSS"))
    {
       p = EvalOperand(p+4,&v,0);
       j = LabelIndex(Label);
@@ -2203,7 +2203,7 @@ char *ParseBSSData(char *p)
    }
    if (ListOn && Phase == 2)
    {
-      PrintLiNo();
+      // PrintLiNo();
       fprintf(lf,"%4.4x             ",bss);
       fprintf(lf,"%s\n",Line);
    }
