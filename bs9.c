@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 17-Feb-2020
+Version: 23-Feb-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -864,7 +864,7 @@ int isym(char c)
 
 char *GetSymbol(char *p, char *s)
 {
-   if (isalpha(*p)) while (isym(*p)) *s++ = *p++;
+   if (*p == '_' || isalpha(*p)) while (isym(*p)) *s++ = *p++;
    *s = 0;
    return p;
 }
@@ -3792,8 +3792,8 @@ void ParseLine(char *cp)
       PrintLine();
       return;
    }
-   cp = CheckPseudo(cp);        // Pseudo Ops
-   if (isalpha(*cp))            // Macro, Label or mnemonic
+   cp = CheckPseudo(cp);           // Pseudo Ops
+   if (*cp == '_' || isalpha(*cp)) // Macro, Label or mnemonic
    {
       if (StrMatch(cp,"MACRO"))
       {
@@ -4231,7 +4231,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 17-Feb-2020         *\n");
+   printf("* Bit Shift Assembler 23-Feb-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
