@@ -3174,6 +3174,16 @@ char *GenerateCode(char *p)
          il = ol + 1;
          q = ScanRegister(OpText,&r1);
          q = ScanRegister(q     ,&r2);
+         if ((r1 < 8 && r2 > 7) || (r1 > 7 && r2 < 8))
+         {
+            ErrorLine(p);
+            ErrorMsg("mixing register of different sizes\n"
+                     "register %-2.2s is %2d bit\n"
+                     "register %-2.2s is %2d bit\n",
+                     RegisterNames[r1],8 + 8 * (r1 < 8),
+                     RegisterNames[r2],8 + 8 * (r2 < 8));
+            exit(1);
+         }
          pb = (r1 << 4) | r2;
          p += strlen(p) ;          // ignore rest
       }
