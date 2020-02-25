@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 23-Feb-2020
+Version: 25-Feb-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -2845,7 +2845,7 @@ void OperandError(char *p)
 }
 
 
-int PostIndexReg(int reg,char *p)
+int PostIndex(int reg,char *p)
 {
    switch(*p)
    {
@@ -2861,6 +2861,14 @@ int PostIndexReg(int reg,char *p)
    }
    return reg;
 }
+
+int PostIndexReg(int reg,char *p)
+{
+   reg = PostIndex(reg,p);
+   if (*(++p)) OperandError(p);
+   return reg;
+}
+
 
 int SetPostByte(char *p, int *v)
 {
@@ -2935,6 +2943,15 @@ int SetPostByte(char *p, int *v)
       return (0x80 | reg | ind | 0x0a);
    }
 
+   // W,R
+
+   if (toupper(p[0]) == 'W' && p[1] == ',')
+   {
+      reg = PostIndexReg(reg,p+2);
+      ql = 0;
+      return (0x80 | reg | ind | 0x0e);
+   }
+
    // PC relative
 
    if (df) fprintf(df,"check PC relative %d [%s],<%s>\n",opl,p,p+opl-3);
@@ -2970,21 +2987,16 @@ int SetPostByte(char *p, int *v)
 
    if (*p == ',' && off == 0)
    {
-      while (*(++p) && *p != ' ')
-      {
-         switch (*p)
-         {
-            case '+': ++inc; if (reg <  0) OperandError(p); break;
-            case '-': ++dec; if (reg >= 0) OperandError(p); break;
-            default : reg = PostIndexReg(reg,p);
-         }
-              if (inc == 1 && dec == 0) amo = 0x00;
-         else if (inc == 2 && dec == 0) amo = 0x01;
-         else if (inc == 0 && dec == 1) amo = 0x02;
-         else if (inc == 0 && dec == 2) amo = 0x03;
-         else if (inc == 0 && dec == 0) amo = 0x04;
-         else OperandError(p);
-      }
+      while (*(++p) == '-') ++dec;
+      reg = PostIndex(reg,p);
+      while (*(++p) == '+') ++inc;
+      if (reg <  0) OperandError(p);
+           if (inc == 1 && dec == 0) amo = 0x00;
+      else if (inc == 2 && dec == 0) amo = 0x01;
+      else if (inc == 0 && dec == 1) amo = 0x02;
+      else if (inc == 0 && dec == 2) amo = 0x03;
+      else if (inc == 0 && dec == 0) amo = 0x04;
+      else OperandError(p);
       ql = 0; // no address
       return (0x80 | reg | amo);
    }
@@ -4241,7 +4253,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 23-Feb-2020         *\n");
+   printf("* Bit Shift Assembler 25-Feb-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
