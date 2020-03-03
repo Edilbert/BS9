@@ -771,6 +771,7 @@ unsigned char Operand[ML];   // binary operand
 char OpText[ML];             // operand source
 char Comment[ML];            // comment source
 char ModuleName[ML];         // current source name
+char Hint[ML];               // optimization hints
 
 // state of label definition
 // defined or BSS or defined by position
@@ -3251,6 +3252,14 @@ char *GenerateCode(char *p)
                ol  = 1;
                ql  = 1;
                il  = 2;
+               if (Phase == 2)
+               {
+                  optc++;
+                  fprintf(of,"%4s %4.4x   -->   %3s %2.2x:%5d %s\n",
+                  Mat[MneIndex].Mne,v,Mat[MneIndex].Mne+1,v,LiNo,Line);
+                  strcpy(Hint," ; ");
+                  strcat(Hint,Mat[MneIndex].Mne+1);
+               }
             }
          }
 
@@ -3455,6 +3464,7 @@ char *GenerateCode(char *p)
                optc++;
                fprintf(of," JMP %4.4x   -->   BRA %2.2x:%5d %s\n",
                        v,rd&0xff,LiNo,Line);
+               strcpy(Hint," ; BRA");
                ol =  1;
                ql =  1;
                il =  2;
@@ -3521,6 +3531,12 @@ char *GenerateCode(char *p)
          PrintPC();
          PrintOC(v);
          fprintf(lf," %s",Line);
+         if (Hint[0])
+         {
+            fprintf(lf,"%s",Hint);
+            Hint[0] = 0;
+         }
+
          if (nops && df) fprintf(df,"Added %d NOP's\n",nops);
          if (nops >  1 && lf) fprintf(lf," ; added %d NOP's",nops);
          if (nops == 1 && lf) fprintf(lf," ; added a NOP");
