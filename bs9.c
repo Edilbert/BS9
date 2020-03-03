@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 25-Feb-2020
+Version: 03-Mar-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -242,7 +242,7 @@ forum64 or the forum of the VzEkC.
 
 */
 
-// switch of windows warnings for string functions
+// switch off windows warnings for string functions
 
 #define _CRT_SECURE_NO_WARNINGS
 
@@ -689,6 +689,7 @@ int EnumValue  = -1; // last used ENUM value
 int MacLev;          // macro nesting level
 int ModuleStart;     // address of a module
 int ModuleTrigger;   // start of module
+int Optimize;        // branch and jump omtimization
 int FormLn;          // lines per page [inactive]
 int DP;              // current direct page
 int CodeStyle;       // 1: operand has no spaces (old form)
@@ -3216,6 +3217,57 @@ char *GenerateCode(char *p)
          ErrorMsg("Branch to undefined label\n");
          exit(1);
       }
+
+      if (Optimize)
+      {
+         // fix short branch to long branch
+
+         if (v < -128 && oc >= 0x20 && oc < 0x30)
+         {
+            if (Phase == 1 || (Phase == 2 && ADL[pc] >= 3))
+            {
+               if (oc == 0x20) // BRA
+               {
+                  oc = 0x16;   // LBRA
+                  ol = 1;
+               }
+               else
+               {
+                  oc |= 0x1000; // short branch -> long branch
+                  ol  = 2;
+               }
+               ql = 2;
+               il = ol + ql;
+            }
+         }
+
+         // optimize long branch to short branch
+
+         if (v >= -128 && v < 0 && oc > 0x1020 && oc < 0x1030)
+         {
+            if (Phase == 1 || (Phase == 2 && ADL[pc] == 2))
+            {
+               oc &= 0xff; // long branch -> short branch
+               ol  = 1;
+               ql  = 1;
+               il  = 2;
+            }
+         }
+
+         // optimize LBRA to BRA
+
+         if (v >= -128 && v < 0 && oc == 0x16)
+         {
+            if (Phase == 1 || (Phase == 2 && ADL[pc] == 2))
+            {
+               oc  = 0x20; // BRA
+               ol  = 1;
+               ql  = 1;
+               il  = 2;
+            }
+         }
+      }
+
       if (Phase == 2 && ql == 1 && (v < -128 || v > 127))
       {
          ErrorLine(p);
@@ -3224,13 +3276,14 @@ char *GenerateCode(char *p)
       }
       if (df) fprintf(df,"branch %4.4x -> %4.4x : %4.4x\n",pc,v,v-pc-il);
 
-      // optimise ?
-
-      if (Phase == 2 && ql == 2 && v >= -128 && v < 128)
+      if (Optimize)
       {
-         optc++;
-         fprintf(of,"%4s to %3s range %4d on line %5d\n",
-            Mat[MneIndex].Mne,Mat[MneIndex].Mne+1,v,LiNo);
+         if (Phase == 2 && ql == 2 && v >= -128 && v < 128)
+         {
+            optc++;
+            fprintf(of,"%4s %4.4x   ***   %3s %2.2x:%5d %s\n",
+               Mat[MneIndex].Mne,v,Mat[MneIndex].Mne+1,v,LiNo,Line);
+         }
       }
       v &= 0xffff;
       p += strlen(p) ;          // ignore rest
@@ -3372,24 +3425,42 @@ char *GenerateCode(char *p)
          }
       }
 
-      // optimise JSR to BSR
-
-      rd = v - pc - 3;
-      if (Phase == 2 && oc == 0xbd && rd >= -128 && rd < 128)
+      if (Optimize)
       {
-         optc++;
-         fprintf(of," JSR to BSR range %4d on line %5d %s\n",
-            rd,LiNo,Line);
-      }
+          // optimise JSR to BSR
 
-      // optimise JMP to BRA
+          rd = v - pc - 3;
+          if (Phase == 2 && oc == 0xbd && rd >= -128 && rd < 128)
+          {
+             optc++;
+             fprintf(of," JSR %4.4x   ***   BSR %2.2x:%5d %s\n",
+                     v,rd&0xff,LiNo,Line);
+          }
 
-      rd = v - pc - 3;
-      if (Phase == 2 && oc == 0x7e && rd >= -128 && rd < 128)
-      {
-         optc++;
-         fprintf(of," JMP to BRA range %4d on line %5d %s\n",
-            rd,LiNo,Line);
+         // optimize JMP to BRA
+
+         rd = v - pc - 3;
+         if (rd >= -128 && rd < 0)
+         {
+            if (Phase == 1 && oc == 0x7e)
+            {
+               oc = 0x20; // BRA
+               ol =  1;
+               ql =  1;
+               il =  2;
+               v  = rd;
+            }
+            if (Phase == 2 && oc == 0x20)
+            {
+               optc++;
+               fprintf(of," JMP %4.4x   -->   BRA %2.2x:%5d %s\n",
+                       v,rd&0xff,LiNo,Line);
+               ol =  1;
+               ql =  1;
+               il =  2;
+               v  = rd;
+            }
+         }
       }
    }
 
@@ -3434,7 +3505,6 @@ char *GenerateCode(char *p)
 
       if (ql == 2) // 16 bit value
       {
-   if (df) fprintf(df,"Insert %2.2x %2.2x\n",v>>8,v&255);
          Put(pc+ibi++,v >> 8,p);
          Put(pc+ibi++,v     ,p);
       }
@@ -4153,8 +4223,8 @@ void WriteBinaries(void)
    }
 }
 
-const char *StatOn  = "On ";
-const char *StatOff = "Off";
+const char *StatOn  = " * ";
+const char *StatOff = "   ";
 
 const char *Stat(int o)
 {
@@ -4174,6 +4244,7 @@ int main(int argc, char *argv[])
       else if (!strcmp(argv[ic],"-d")) Debug = 1;
       else if (!strcmp(argv[ic],"-i")) IgnoreCase = 1;
       else if (!strcmp(argv[ic],"-n")) WithLiNo = 1;
+      else if (!strcmp(argv[ic],"-o")) Optimize = 1;
       else if (!strcmp(argv[ic],"-p")) Preprocess = 1;
       else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,1);
       else if (!strncmp(argv[ic],"-l",2))
@@ -4211,6 +4282,7 @@ int main(int argc, char *argv[])
       printf("   -i ignore case in symbols\n");
       printf("   -l preset value for memory\n");
       printf("   -n include line numbers in listing\n");
+      printf("   -o optimize long branches and jumps\n");
       printf("   -p print preprocessed source\n");
       printf("   -x assemble listing file - skip hex in front\n");
       exit(1);
@@ -4253,7 +4325,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 25-Feb-2020         *\n");
+   printf("* Bit Shift Assembler 03-Mar-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
@@ -4269,7 +4341,7 @@ int main(int argc, char *argv[])
    lf = AssertFileOp(fopen(Lst,"w"), "Open list file");
    if (Debug) df = AssertFileOp(fopen("Debug.lst","w"), "Open Debug file");
    if (Preprocess) pf = AssertFileOp(fopen(Pre,"w"), "Open preprocessor file");
-   of = AssertFileOp(fopen(Opt,"w"), "Open hint file");
+   if (Optimize) of = AssertFileOp(fopen(Opt,"w"), "Open hint file");
 
    Phase1();
    Phase2();
@@ -4286,11 +4358,15 @@ int main(int argc, char *argv[])
    if (fclose(lf)) AssertFileOp(NULL, "Close list file");
 
    if (df) if (fclose(df)) AssertFileOp(NULL, "Close debug file");
-   if (fclose(of)) AssertFileOp(NULL, "Close hint file");
-   if (optc == 0) remove(Opt);
-   if (optc) printf("* Opt   : %-31.31s *\n",Opt);
-   printf("* -d:%s     -i:%s     -n:%s     -x:%s *\n",
-         Stat(Debug),Stat(IgnoreCase),Stat(WithLiNo),Stat(SkipHex));
+   if (Optimize)
+   {
+      if (fclose(of)) AssertFileOp(NULL, "Close hint file");
+      if (optc == 0) remove(Opt);
+      if (optc) printf("* Opt   : %-31.31s *\n",Opt);
+   }
+   printf("* -d:%s  -i:%s  -n:%s  -o:%s  -x:%s  *\n",
+         Stat(Debug),Stat(IgnoreCase),Stat(WithLiNo),
+         Stat(Optimize),Stat(SkipHex));
    printf("*******************************************\n");
    printf("* Source Lines: %6d                    *\n",TotalLiNo);
    printf("* Symbols     : %6d                    *\n",Labels);
