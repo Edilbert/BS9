@@ -646,7 +646,7 @@ int DimOp = DIMOP_6309;
 char *Register_6309[] =
 {
 //  0   1   2   3   4   5    6   7   8   9    A    B   C   D   E   F
-   "D","X","Y","U","S","PC","W","V","A","B","CC","DP","*","*","E","F"
+   "D","X","Y","U","S","PC","W","V","A","B","CC","DP","0","*","E","F"
 };
 
 char *Register_6809[] =
@@ -3188,7 +3188,7 @@ char *GenerateCode(char *p)
          il = ol + 1;
          q = ScanRegister(OpText,&r1);
          q = ScanRegister(q     ,&r2);
-         if ((r1 < 8 && r2 > 7) || (r1 > 7 && r2 < 8))
+         if (r1 != 12 && r2 != 12 && ((r1 < 8 && r2 > 7) || (r1 > 7 && r2 < 8)))
          {
             ErrorLine(p);
             ErrorMsg("mixing register of different sizes\n"
