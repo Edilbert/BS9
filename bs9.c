@@ -3313,6 +3313,7 @@ char *GenerateCode(char *p)
       EvalOperand(OpText+1,&v,0);
       ol = 1 + (oc > 255);
       ql = RegisterSize(MneIndex);
+      if (ql == 4 && oc != 0xcd) ql = 2; // only LDQ has 32 bit value
       il = ol + ql;
       if (Phase == 2 && v == UNDEF)
       {
