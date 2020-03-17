@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 03-Mar-2020
+Version: 17-Mar-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -97,6 +97,7 @@ LIST -                         switch off assembler listing
 BITS . . * . * . . .           stores a byte from 8 bit symbols
 BYTE $20,"Example",0           stores a series of byte data
 WORD LAB_10, WriteTape,$0200   stores a series of word data
+LONG 1000000                   stores 32 bit long data
 REAL  3.1415926                stores a 32 bit real
 FILL  N ($EA)                  fill memory with N bytes containing $EA
 FILL  $A000 - * (0)            fill memory from pc(*) upto $9FFF
@@ -646,7 +647,7 @@ int DimOp = DIMOP_6309;
 char *Register_6309[] =
 {
 //  0   1   2   3   4   5    6   7   8   9    A    B   C   D   E   F
-   "D","X","Y","U","S","PC","W","V","A","B","CC","DP","0","*","E","F"
+   "D","X","Y","U","S","PC","W","V","A","B","CC","DP","*","0","E","F"
 };
 
 char *Register_6809[] =
@@ -1919,7 +1920,7 @@ char *ParseWordData(char *p)
    }
    if (l < 1)
    {
-      ErrorMsg("Missing FDB data\n");
+      ErrorMsg("Missing WORD data\n");
       ErrorLine(p);
       exit(1);
    }
@@ -1943,6 +1944,57 @@ char *ParseWordData(char *p)
       {
          if (l == 2) fprintf(lf,"        ");
          else        fprintf(lf,"   ");
+         fprintf(lf," %s\n",Line);
+      }
+   }
+   pc += l;
+
+   return p;
+}
+
+
+char *ParseLongData(char *p)
+{
+   int i,j,l,v;
+   unsigned char ByteBuffer[ML];
+
+   l = 0;
+   p = SkipSpace(p);
+   while (*p && *p != ';') // Parse data line
+   {
+      p = EvalOperand(p,&v,0);
+      ByteBuffer[l++] = v >> 24;
+      ByteBuffer[l++] = v >> 16;
+      ByteBuffer[l++] = v >>  8;
+      ByteBuffer[l++] = v;
+      p = SkipToComma(p);
+      if (*p == ',') ++p;
+   }
+   if (l < 4)
+   {
+      ErrorMsg("Missing LONG data\n");
+      ErrorLine(p);
+      exit(1);
+   }
+   j = AddressIndex(pc);
+   if (j >= 0 && df) fprintf(df,"LONG label [%s] $%4.4x $%4.4x %d bytes\n",
+                   lab[j].Name,lab[j].Address,pc,l);
+   if (j >= 0)
+   for ( ; j < Labels ; ++j) // There may be multiple lables on this address
+   {
+       if (lab[j].Address == pc) lab[j].Bytes = l;
+   }
+   if (Phase == 2)
+   {
+      for (i=0 ; i < l ; ++i)
+      {
+         Put(pc+i,ByteBuffer[i],p);
+         if (ListOn && (i == 0 || i == 2))
+            fprintf(lf," %2.2x%2.2x",ByteBuffer[i],ByteBuffer[i+1]);
+      }
+      if (ListOn)
+      {
+         fprintf(lf,"   ");
          fprintf(lf," %s\n",Line);
       }
    }
@@ -2478,6 +2530,7 @@ char *ps_ignore(char *p) { PrintLine(); return p; }
 char *ps_include(char *p){ PrintPC(); return IncludeFile(p); }
 char *ps_list(char *p)   { PrintPC(); return ParseListOption(p); }
 char *ps_load(char *p)   { PrintPC(); return ParseLoadData(p); }
+char *ps_long(char *p)   { PrintPC(); return ParseLongData(p); }
 char *ps_real(char *p)   { PrintPC(); return ParseRealData(p); }
 char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
 char *ps_store(char *p)  {            return ParseStoreData(p); }
@@ -2567,6 +2620,7 @@ struct PseudoStruct PseudoTab[] =
    {"INTERN" , &ps_ignore },
    {"LIST"   , &ps_list   },
    {"LOAD"   , &ps_load   },
+   {"LONG"   , &ps_long   },
    {"ORG"    , &ps_org    },
    {"RMB"    , &ps_rmb    },
    {"REAL"   , &ps_real   },
@@ -3188,7 +3242,7 @@ char *GenerateCode(char *p)
          il = ol + 1;
          q = ScanRegister(OpText,&r1);
          q = ScanRegister(q     ,&r2);
-         if (r1 != 12 && r2 != 12 && ((r1 < 8 && r2 > 7) || (r1 > 7 && r2 < 8)))
+         if (r1 != 13 && r2 != 13 && ((r1 < 8 && r2 > 7) || (r1 > 7 && r2 < 8)))
          {
             ErrorLine(p);
             ErrorMsg("mixing register of different sizes\n"
@@ -4342,7 +4396,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 03-Mar-2020         *\n");
+   printf("* Bit Shift Assembler 17-Mar-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
