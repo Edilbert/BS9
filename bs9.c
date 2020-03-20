@@ -4456,5 +4456,5 @@ int main(int argc, char *argv[])
    else printf("* OK, no errors                           *\n");
    printf("*******************************************\n");
    printf("\n");
-   return 0;
+   return ErrNum;
 }
