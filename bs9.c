@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 17-Mar-2020
+Version: 20-Mar-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -4162,7 +4162,10 @@ void ListUndefinedSymbols(void)
    for (i=0 ; i < Labels ; ++i)
    {
       if (lab[i].Address == UNDEF)
+      {
          printf("* Undefined   : %-25.25s *\n",lab[i].Name);
+         ++ErrNum;
+      }
    }
 }
 
@@ -4396,7 +4399,7 @@ int main(int argc, char *argv[])
 
    printf("\n");
    printf("*******************************************\n");
-   printf("* Bit Shift Assembler 17-Mar-2020         *\n");
+   printf("* Bit Shift Assembler 20-Mar-2020         *\n");
    printf("* --------------------------------------- *\n");
    printf("* Source: %-31.31s *\n",Src);
    printf("* List  : %-31.31s *\n",Lst);
@@ -4448,8 +4451,8 @@ int main(int argc, char *argv[])
    printf("* Hints       : %6d for optimization   *\n",optc);
    printf("*******************************************\n");
    if (ErrNum)
-      printf("* %3d error%s occured%s                      *\n",
-             ErrNum, ErrNum == 1 ? "" : "s", ErrNum == 1 ? " " : "");
+      printf("* %3d ERROR%s occured%s                      *\n",
+             ErrNum, ErrNum == 1 ? "" : "S", ErrNum == 1 ? " " : "");
    else printf("* OK, no errors                           *\n");
    printf("*******************************************\n");
    printf("\n");
