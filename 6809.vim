@@ -254,7 +254,7 @@ syn match asm6809Symbol		"[a-z_?.][a-z0-9_?.$]*" contained
 syn match asm6809Immediate	"#[a-z_?.][a-z0-9_?.]*" contains=asm6809Symbol
 
 " Special items for comments
-syn keyword asm6809Todo		contained TODO
+syn keyword asm6809Todo		contained TODO FIXME
 
 " Operators
 syn match asm6809Operator	"[-+*/]"	" Must occur before Comments
