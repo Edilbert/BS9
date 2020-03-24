@@ -4250,10 +4250,13 @@ void WriteS19Format(int i)
     int UnwrittenBytes,Addr,BytesInThisLine;
     const char *msg = "Write S19 file";
 
-    filename = StrNDup(SFF[i],strlen(SFF[i] + 4));
+    filename = StrNDup(SFF[i],strlen(SFF[i]) + 4);
     ExtPtr = strrchr(filename, '.');
-    if (!ExtPtr) ExtPtr = filename + strlen(filename);
-    memmove(ExtPtr, ".S19",5);
+    if (!ExtPtr)
+    {
+       ExtPtr = filename + strlen(filename);
+       memmove(ExtPtr, ".S19",5);
+    }
     if (df)
     {
        fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
