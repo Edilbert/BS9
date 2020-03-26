@@ -287,6 +287,10 @@ void ErrorMsg(const char *format, ...);
 
 // store code or data into ROM array
 
+// ***
+// Put
+// ***
+
 void Put(int i, int v, char *p)
 {
    v &= 0xff;
@@ -685,6 +689,7 @@ int LiNo       =  0; // line number of current file
 int WithLiNo   =  0; // print line numbers in listing if set
 int TotalLiNo  =  0; // total line number
 int Preprocess =  0; // print preprocessed source file <file.pp>
+int Quiet      =  0; // switch for quiet mode
 int ERRMAX     = 10; // stop assemby after ERRMAX errors
 int EnumValue  = -1; // last used ENUM value
 int MacLev;          // macro nesting level
@@ -848,6 +853,10 @@ char *StrMatch(char *s, char *m)
 // Make sure, it's not part of a larger word
 // by checking the characters before and after
 
+// ******
+// StrKey
+// ******
+
 char *StrKey(char *s, char *m)
 {
    char *r = StrMatch(s,m);
@@ -858,6 +867,10 @@ char *StrKey(char *s, char *m)
    }
    return r;
 }
+
+// ****
+// isym
+// ****
 
 int isym(char c)
 {
@@ -4301,13 +4314,10 @@ void WriteS19Format(int i)
     int UnwrittenBytes,Addr,BytesInThisLine;
     const char *msg = "Write S19 file";
 
-    filename = StrNDup(SFF[i],strlen(SFF[i]) + 4);
+    filename = StrNDup(SFF[i],strlen(SFF[i] + 4));
     ExtPtr = strrchr(filename, '.');
-    if (!ExtPtr)
-    {
-       ExtPtr = filename + strlen(filename);
-       memmove(ExtPtr, ".S19",5);
-    }
+    if (!ExtPtr) ExtPtr = filename + strlen(filename);
+    memmove(ExtPtr, ".S19",5);
     if (df)
     {
        fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
@@ -4368,12 +4378,13 @@ int main(int argc, char *argv[])
 
    for (ic=1 ; ic < argc ; ++ic)
    {
-           if (!strcmp(argv[ic],"-x")) SkipHex = 1;
-      else if (!strcmp(argv[ic],"-d")) Debug = 1;
+           if (!strcmp(argv[ic],"-x")) SkipHex    = 1;
+      else if (!strcmp(argv[ic],"-d")) Debug      = 1;
       else if (!strcmp(argv[ic],"-i")) IgnoreCase = 1;
-      else if (!strcmp(argv[ic],"-n")) WithLiNo = 1;
-      else if (!strcmp(argv[ic],"-o")) Optimize = 1;
+      else if (!strcmp(argv[ic],"-n")) WithLiNo   = 1;
+      else if (!strcmp(argv[ic],"-o")) Optimize   = 1;
       else if (!strcmp(argv[ic],"-p")) Preprocess = 1;
+      else if (!strcmp(argv[ic],"-q")) Quiet      = 1;
       else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,1);
       else if (!strncmp(argv[ic],"-l",2))
       {
@@ -4412,6 +4423,7 @@ int main(int argc, char *argv[])
       printf("   -n include line numbers in listing\n");
       printf("   -o optimize long branches and jumps\n");
       printf("   -p print preprocessed source\n");
+      printf("   -q quiet\n");
       printf("   -x assemble listing file - skip hex in front\n");
       exit(1);
    }
@@ -4451,12 +4463,15 @@ int main(int argc, char *argv[])
    memmove(Lst+l,".lst",4);
    memmove(Opt+l,".opt",4);
 
-   printf("\n");
-   printf("*******************************************\n");
-   printf("* Bit Shift Assembler 26-Mar-2020         *\n");
-   printf("* --------------------------------------- *\n");
-   printf("* Source: %-31.31s *\n",Src);
-   printf("* List  : %-31.31s *\n",Lst);
+   if (!Quiet)
+   {
+      printf("\n");
+      printf("*******************************************\n");
+      printf("* Bit Shift Assembler 26-Mar-2020         *\n");
+      printf("* --------------------------------------- *\n");
+      printf("* Source: %-31.31s *\n",Src);
+      printf("* List  : %-31.31s *\n",Lst);
+   }
 
    sf = fopen(Src,"r");
    if (!sf)
@@ -4492,23 +4507,26 @@ int main(int argc, char *argv[])
       if (optc == 0) remove(Opt);
       if (optc) printf("* Opt   : %-31.31s *\n",Opt);
    }
-   printf("* -d:%s  -i:%s  -n:%s  -o:%s  -x:%s  *\n",
-         Stat(Debug),Stat(IgnoreCase),Stat(WithLiNo),
-         Stat(Optimize),Stat(SkipHex));
-   printf("*******************************************\n");
-   printf("* Source Lines: %6d                    *\n",TotalLiNo);
-   printf("* Symbols     : %6d                    *\n",Labels);
-   printf("* Macros      : %6d                    *\n",Macros);
-   if (Preset)
-   printf("* Preset      : %6d                    *\n",Preset);
-   if (optc)
-   printf("* Hints       : %6d for optimization   *\n",optc);
-   printf("*******************************************\n");
+
+   if (!Quiet)
+   {
+      printf("* -d:%s  -i:%s  -n:%s  -o:%s  -x:%s  *\n",
+            Stat(Debug),Stat(IgnoreCase),Stat(WithLiNo),
+            Stat(Optimize),Stat(SkipHex));
+      printf("*******************************************\n");
+      printf("* Source Lines: %6d                    *\n",TotalLiNo);
+      printf("* Symbols     : %6d                    *\n",Labels);
+      printf("* Macros      : %6d                    *\n",Macros);
+      if (Preset)
+      printf("* Preset      : %6d                    *\n",Preset);
+      if (optc)
+      printf("* Hints       : %6d for optimization   *\n",optc);
+      printf("*******************************************\n");
+   }
    if (ErrNum)
       printf("* %3d ERROR%s occured%s                      *\n",
              ErrNum, ErrNum == 1 ? "" : "S", ErrNum == 1 ? " " : "");
-   else printf("* OK, no errors                           *\n");
-   printf("*******************************************\n");
-   printf("\n");
+   else if (!Quiet) printf("* OK, no errors                           *\n");
+   if (!Quiet) printf("*******************************************\n\n");
    return ErrNum;
 }
