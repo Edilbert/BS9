@@ -718,6 +718,14 @@ int ForcedMode;      // -1: direct page, +1: extended
 int optc;            // count optimization messages
 int Preset;          // value for initialisation
 
+// local labels
+
+#define PLUMAX 200
+
+int minlab[11];
+int plucnt[11];
+int plulab[11][PLUMAX];
+
 // Filenames
 
 #define FNSIZE 256
@@ -3316,7 +3324,28 @@ char *GenerateCode(char *p)
       ol = 1 + (oc > 255); // operand length = opcode length
       ql = 1 + (Mat[MneIndex].Mne[0] == 'L');
       il = ol + ql;
-      EvalOperand(OpText,&v,0);
+      if (OpText[0] == '-') // local backward label
+      {
+         l = strlen(OpText);
+         for (i=0 ; i < l ; ++i)
+         if (OpText[i] != '-') break;
+         if (i == l) v = minlab[l];
+         else EvalOperand(OpText,&v,0);
+      }
+      else if (OpText[0] == '+') // local forward label
+      {
+         l = strlen(OpText);
+         for (i=0 ; i < l ; ++i)
+         if (OpText[i] != '+') break;
+         if (i == l)
+         {
+            v = UNDEF;
+            i = plucnt[l];
+            while (--i >= 0 && plulab[l][i] > pc) v = plulab[l][i];
+         }
+         else EvalOperand(OpText,&v,0);
+      }
+      else EvalOperand(OpText,&v,0);
       if (v != UNDEF) v  -= (pc + il);
       if (Phase == 2 && v == UNDEF)
       {
@@ -3963,7 +3992,7 @@ void NextMacLine(char *w)
 
 void ParseLine(char *cp)
 {
-   int i,v,m;
+   int i,l,v,m;
    char *start = cp;  // Remember start of line
 
    am = -1;
@@ -4007,6 +4036,36 @@ void ParseLine(char *cp)
       PrintLine();
       return;
    }
+
+   // set local backward label
+
+   if (*cp == '-')
+   {
+      l = strlen(cp);
+      i = 0;
+      while (*cp++ == '-' && i < 10 && i < l) ++i;
+      minlab[i] = pc;
+   }
+
+   // set local forward label
+
+   if (*cp == '+')
+   {
+      l = strlen(cp);
+      i = 0;
+      while (*cp++ == '+' && i < 10 && i < l) ++i;
+      if (Phase == 1)
+      {
+         plulab[i][plucnt[i]] = pc;
+         if (++plucnt[i] > PLUMAX-2)
+         {
+            ++ErrNum;
+            ErrorMsg("too many local labels");
+            exit(1);
+         }
+      }
+   }
+
    cp = CheckPseudo(cp);           // Pseudo Ops
    if (*cp == '_' || isalpha(*cp)) // Macro, Label or mnemonic
    {
@@ -4107,10 +4166,12 @@ int CloseInclude(void)
 
 void Phase1(void)
 {
-    int l,Eof;
+    int i,l,Eof;
 
    Phase = 1;
    ForcedEnd = 0;
+   for (i=0 ; i < 11 ; ++i) minlab[i] = UNDEF;
+
    fgets(Line,sizeof(Line),sf);
    Eof = feof(sf);
    while (!Eof || IncludeLevel > 0)
@@ -4137,7 +4198,7 @@ void Phase1(void)
 
 void Phase2(void)
 {
-   int l,Eof;
+   int i,l,Eof;
 
    Phase     =    2;
    pc        =   -1;
@@ -4145,6 +4206,8 @@ void Phase2(void)
    ForcedEnd =    0;
    ListOn    =    1;
    CPU       = 6309;
+
+   for (i=0 ; i < 11 ; ++i) minlab[i] = UNDEF;
 
    if (IfLevel)
    {
