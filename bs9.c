@@ -3097,7 +3097,7 @@ int SetPostByte(char *p, int *v)
       ql = 0; // no address
       if (reg == 0xf) // W register
       {
-      if (df) fprintf(df,"zero offset amo=%2.2x\n",amo);
+         if (df) fprintf(df,"zero offset amo=%2.2x\n",amo);
               if (amo == 4) reg = 0x8f; // ,W
          else if (amo == 1) reg = 0xcf; // ,W++
          else if (amo == 3) reg = 0xef; // ,--W
