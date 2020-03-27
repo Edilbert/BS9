@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 26-Mar-2020
+Version: 27-Mar-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -2644,7 +2644,7 @@ struct PseudoStruct PseudoTab[] =
    {"WORD"   , &ps_word   }
 };
 
-#define PSEUDOS (sizeof(PseudoTab) / sizeof(struct PseudoStruct))
+#define PSEUDOS (int)(sizeof(PseudoTab) / sizeof(struct PseudoStruct))
 
 char *CheckPseudo(char *p)
 {
@@ -4521,7 +4521,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 26-Mar-2020         *\n");
+      printf("* Bit Shift Assembler 27-Mar-2020         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
