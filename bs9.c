@@ -2556,6 +2556,22 @@ char *ParseSubroutine(char *p)
    return p;
 }
 
+// ******
+// EndSub
+// ******
+
+char *EndSub(char *p)
+{
+   if (Phase == 2 && ListOn)
+   {
+      PrintPC();
+      p = ListSizeInfo(p);
+   }
+   Scope[0] = 0;
+   ModuleStart = 0;
+   return p;
+}
+
 // Functions for pseudo ops
 
 char *ps_bits(char *p)   { PrintPC(); return ParseBitData(p); }
@@ -2565,7 +2581,7 @@ char *ps_case(char *p)   { PrintPC(); return ParseCaseData(p); }
 char *ps_cmap(char *p)   { PrintPC(); return ParseCmapData(p); }
 char *ps_cpu(char *p)    {            return ParseCPUData(p); }
 char *ps_end(char *p)    { PrintLine(); ForcedEnd = 1; return p; }
-char *ps_endsub(char *p) { PrintLine(); Scope[0] = 0; return p; }
+char *ps_endsub(char *p) {            return EndSub(p); }
 char *ps_fill(char *p)   { PrintPC(); return ParseFillData(p); }
 char *ps_formln(char *p) { FormLn = atoi(p); PrintByteLine(FormLn); return p; }
 char *ps_ignore(char *p) { PrintLine(); return p; }
@@ -4144,16 +4160,6 @@ void ParseLine(char *cp)
       ExtractOpText(cp+strlen(Mat[MneIndex].Mne));
       cp += strlen(cp);
       GenerateCode(OpText);
-      if ((Phase == 2 && ModuleStart != UNDEF && ModuleStart != 0) &&
-          (oc == 0x39 || (oc == 0x35 && (ROM[pc-1] & 0x80))))
-      {       //  RTS           PULS                   PC
-         i = AddressIndex(ModuleStart);
-         if (ListOn && i >= 0)
-         {
-            fprintf(lf,"   ; Size%5d [%s]",pc-ModuleStart,lab[i].Name);
-            ModuleStart = 0;
-         }
-      }
    }
    if (ListOn && Phase == 2) fprintf(lf,"\n");
    if (*cp == 0 || *cp == ';' || *cp == '*') return; // end of code
