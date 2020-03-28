@@ -690,7 +690,6 @@ int ERRMAX     = 10; // stop assemby after ERRMAX errors
 int EnumValue  = -1; // last used ENUM value
 int MacLev;          // macro nesting level
 int ModuleStart;     // address of a module
-int ModuleTrigger;   // start of module
 int Optimize;        // branch and jump omtimization
 int FormLn;          // lines per page [inactive]
 int DP;              // current direct page
@@ -780,8 +779,8 @@ char MacArgs[ML];            // macro arguments
 unsigned char Operand[ML];   // binary operand
 char OpText[ML];             // operand source
 char Comment[ML];            // comment source
-char ModuleName[ML];         // current source name
 char Hint[ML];               // optimization hints
+char Scope[ML];              // for local symbols
 
 // state of label definition
 // defined or BSS or defined by position
@@ -874,8 +873,21 @@ int isym(char c)
 }
 
 
+// *********
+// GetSymbol
+// *********
+
 char *GetSymbol(char *p, char *s)
 {
+   if (*p == '.') // expand local symbol
+   {
+      if (Scope[0])
+      {
+         strcpy(s,Scope);
+         s += strlen(s);
+         *s++ = *p++;
+      }
+   }
    if (*p == '_' || isalpha(*p)) while (isym(*p)) *s++ = *p++;
    *s = 0;
    return p;
@@ -2527,6 +2539,23 @@ char *ParseStringData(char *p)
    return p;
 }
 
+// ***************
+// ParseSubroutine
+// ***************
+
+char *ParseSubroutine(char *p)
+{
+   p = SkipSpace(p);
+   DefineLabel(p,&ModuleStart,0);
+   strcpy(Scope,Label);
+   if (df) fprintf(df,"SCOPE: [%s]\n",Scope);
+   if (Phase == 2 && ListOn)
+   {
+      fprintf(lf,"      %s\n",Line);
+   }
+   return p;
+}
+
 // Functions for pseudo ops
 
 char *ps_bits(char *p)   { PrintPC(); return ParseBitData(p); }
@@ -2536,6 +2565,7 @@ char *ps_case(char *p)   { PrintPC(); return ParseCaseData(p); }
 char *ps_cmap(char *p)   { PrintPC(); return ParseCmapData(p); }
 char *ps_cpu(char *p)    {            return ParseCPUData(p); }
 char *ps_end(char *p)    { PrintLine(); ForcedEnd = 1; return p; }
+char *ps_endsub(char *p) { PrintLine(); Scope[0] = 0; return p; }
 char *ps_fill(char *p)   { PrintPC(); return ParseFillData(p); }
 char *ps_formln(char *p) { FormLn = atoi(p); PrintByteLine(FormLn); return p; }
 char *ps_ignore(char *p) { PrintLine(); return p; }
@@ -2547,6 +2577,7 @@ char *ps_real(char *p)   { PrintPC(); return ParseRealData(p); }
 char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
 char *ps_store(char *p)  {            return ParseStoreData(p); }
 char *ps_string(char *p) { PrintPC(); return ParseStringData(p); }
+char *ps_subr(char *p)   { PrintPC(); return ParseSubroutine(p); }
 char *ps_word(char *p)   { PrintPC(); return ParseWordData(p); }
 
 char *ps_align(char *p)
@@ -2614,34 +2645,36 @@ struct PseudoStruct
 
 struct PseudoStruct PseudoTab[] =
 {
-   {"ALIGN"  , &ps_align  },
-   {"BITS"   , &ps_bits   },
-   {"BSS"    , &ps_bss    },
-   {"BYTE"   , &ps_byte   },
-   {"CASE"   , &ps_case   },
-   {"CMAP"   , &ps_cmap   },
-   {"CPU"    , &ps_cpu    },
-   {"END"    , &ps_end    },
-   {"EXTERN" , &ps_ignore },
-   {"FCB"    , &ps_byte   },
-   {"FCC"    , &ps_string },
-   {"FDB"    , &ps_word   },
-   {"FILL"   , &ps_fill   },
-   {"FORMLN" , &ps_formln },
-   {"INCLUDE", &ps_include},
-   {"INTERN" , &ps_ignore },
-   {"LIST"   , &ps_list   },
-   {"LOAD"   , &ps_load   },
-   {"LONG"   , &ps_long   },
-   {"ORG"    , &ps_org    },
-   {"RMB"    , &ps_rmb    },
-   {"REAL"   , &ps_real   },
-   {"SECT"   , &ps_sect   },
-   {"SETDP"  , &ps_setdp  },
-   {"SIZE"   , &ps_size   },
-   {"STORE"  , &ps_store  },
-   {"TTL"    , &ps_ignore },
-   {"WORD"   , &ps_word   }
+   {"ALIGN"     , &ps_align  },
+   {"BITS"      , &ps_bits   },
+   {"BSS"       , &ps_bss    },
+   {"BYTE"      , &ps_byte   },
+   {"CASE"      , &ps_case   },
+   {"CMAP"      , &ps_cmap   },
+   {"CPU"       , &ps_cpu    },
+   {"END"       , &ps_end    },
+   {"ENDSUB"    , &ps_endsub },
+   {"EXTERN"    , &ps_ignore },
+   {"FCB"       , &ps_byte   },
+   {"FCC"       , &ps_string },
+   {"FDB"       , &ps_word   },
+   {"FILL"      , &ps_fill   },
+   {"FORMLN"    , &ps_formln },
+   {"INCLUDE"   , &ps_include},
+   {"INTERN"    , &ps_ignore },
+   {"LIST"      , &ps_list   },
+   {"LOAD"      , &ps_load   },
+   {"LONG"      , &ps_long   },
+   {"ORG"       , &ps_org    },
+   {"RMB"       , &ps_rmb    },
+   {"REAL"      , &ps_real   },
+   {"SECT"      , &ps_sect   },
+   {"SETDP"     , &ps_setdp  },
+   {"SIZE"      , &ps_size   },
+   {"STORE"     , &ps_store  },
+   {"SUBROUTINE", &ps_subr   },
+   {"TTL"       , &ps_ignore },
+   {"WORD"      , &ps_word   }
 };
 
 #define PSEUDOS (int)(sizeof(PseudoTab) / sizeof(struct PseudoStruct))
@@ -4002,7 +4035,6 @@ void ParseLine(char *cp)
    Comment[0] = 0;
    cp = SkipHexCode(cp);        // Skip disassembly
    cp = SkipSpace(cp);          // Skip leading blanks
-   if (!strncmp(cp,"****",4)) ModuleTrigger = LiNo;
    if (df) fprintf(df,"%5d %4.4x Parse[%d]:%s\n",LiNo,pc&0xffff,Phase,cp);
    if (CheckCondition(cp)) return;
    if (Skipping)
@@ -4067,7 +4099,7 @@ void ParseLine(char *cp)
    }
 
    cp = CheckPseudo(cp);           // Pseudo Ops
-   if (*cp == '_' || isalpha(*cp)) // Macro, Label or mnemonic
+   if (*cp == '.' || *cp == '_' || isalpha(*cp)) // Macro, Label or mnemonic
    {
       if (StrMatch(cp,"MACRO"))
       {
@@ -4087,7 +4119,6 @@ void ParseLine(char *cp)
                    StrKey(cp,"EQU") || strchr(cp,'='))
                   cp = DefineLabel(cp,&v,0);
             }
-            if (ModuleTrigger == LiNo-1) ModuleStart = v;
             cp = SkipSpace(cp);         // Skip leading blanks
             if (*cp) m = ExpandMacro(cp);   // Macro after label
             if (m >= 0) cp += strlen(cp);         // advance to EOL
@@ -4206,6 +4237,8 @@ void Phase2(void)
    ForcedEnd =    0;
    ListOn    =    1;
    CPU       = 6309;
+   Scope[0]  =    0;
+   ModuleStart =  0;
 
    for (i=0 ; i < 11 ; ++i) minlab[i] = UNDEF;
 
