@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 27-Mar-2020
+Version: 05-Apr-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -2792,7 +2792,7 @@ void SetInstructionLength(char *p)
       ADL[pc] = il;
       for (i=1 ; i < il ; ++i) ADL[pc+i] = -1;
    }
-   if (df) fprintf(df,"oc = %4.2x il = %d\n",oc,il);
+   if (df) fprintf(df,"lock oc = %4.2x il = %d\n",oc,il);
 }
 
 
@@ -3266,6 +3266,7 @@ char *GenerateCode(char *p)
          ErrorMsg("Immediate value must be followed by comma\n");
          exit(1);
       }
+      v = UNDEF;
    }
 
    // inherent instruction (no operand)
@@ -3579,9 +3580,17 @@ char *GenerateCode(char *p)
 
       if (Phase == 2) // opcode and instruction length is set in phase 1
       {
-         oc = ROM[pc];
-         ol = 1 + (oc == 0x10 || oc == 0x11);
-         if (ol == 2) oc = (oc << 8) | ROM[pc+1];
+         if (XIM)
+         {
+            oc = XIM;
+            ol = 2;
+         }
+         else
+         {
+            oc = ROM[pc];
+            ol = 1 + (oc == 0x10 || oc == 0x11);
+            if (ol == 2) oc = (oc << 8) | ROM[pc+1];
+         }
          il = ADL[pc];
          ql = il - ol;
          if (ForcedMode < 0) v &= 0xff;
@@ -3604,7 +3613,7 @@ char *GenerateCode(char *p)
 
             if (ForcedMode <= 0) // not forced extended
             {
-               if (XIM) qc = oc & 0xfff;
+               if (XIM) qc = oc & 0xffff;
                else     qc = Mat[MneIndex].Opc[AM_Direct];
 
                if (qc >= 0 && (ForcedMode < 0 ||
@@ -4560,7 +4569,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 27-Mar-2020         *\n");
+      printf("* Bit Shift Assembler 05-Apr-2020         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
