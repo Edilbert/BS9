@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 05-Apr-2020
+Version: 06-Apr-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -1632,12 +1632,14 @@ char *EvalHexValue(char *p, int *v)
 {
    char *EndPtr;
    *v = strtol(p,&EndPtr,16);
+/*
    if (EndPtr == p || *v < 0 || *v > 0xffff)
    {
       ErrorLine(p);
       ErrorMsg("Illegal hex value\n");
       exit(1);
    }
+*/
    return EndPtr;
 }
 
@@ -4569,7 +4571,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 05-Apr-2020         *\n");
+      printf("* Bit Shift Assembler 06-Apr-2020         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
