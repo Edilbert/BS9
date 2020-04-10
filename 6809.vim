@@ -220,6 +220,8 @@ syn match asm6809Opcode "\<TIM\s"
 syn match asm6809Opcode "\<TSTA"
 syn match asm6809Opcode "\<TSTB"
 syn match asm6809Opcode "\<TSTD"
+syn match asm6809Opcode "\<TSTE"
+syn match asm6809Opcode "\<TSTF"
 syn match asm6809Opcode "\<TSTW"
 syn match asm6809Opcode "\<TST\s"
 
