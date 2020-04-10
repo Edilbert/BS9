@@ -3627,6 +3627,13 @@ char *GenerateCode(char *p)
                }
             }
          }
+         else
+         {
+            ++ErrNum;
+            ErrorLine(p);
+            ErrorMsg("Illegal instruction %s %s\n",Mat[MneIndex].Mne,OpText);
+            exit(1);
+         }
       }
 
       if (Optimize)
