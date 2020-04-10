@@ -2553,7 +2553,7 @@ char *ParseSubroutine(char *p)
    if (df) fprintf(df,"SCOPE: [%s]\n",Scope);
    if (Phase == 2 && ListOn)
    {
-      fprintf(lf,"      %s\n",Line);
+      fprintf(lf,"              %s\n",Line);
    }
    return p;
 }
