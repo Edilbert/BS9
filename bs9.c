@@ -2565,14 +2565,14 @@ char *Parsebit5Data(char *p)
    int i,v;
 
    p = SkipSpace(p);
-   if (strlen(p) < 6 || p[0] != '"' || p[5] != '"')
+   if (strlen(p) < 7 || p[0] != '"' || p[6] != '"')
    {
-      ErrorMsg("Need 4-character string\n");
+      ErrorMsg("Need 5 character string\n");
       ErrorLine(p);
       exit(1);
    }
 
-   // pack 4 characters into 20 bit
+   // pack 5 characters into 20 bit
 
    // '?' ->  0
    // ' ' ->  1
@@ -2596,6 +2596,7 @@ char *Parsebit5Data(char *p)
       }
       v = (v << 5) | (c - '?');
    }
+   if (p[5] == 'C') v |= (1 << 20);
 
    if (Phase == 2)
    {
@@ -2607,7 +2608,7 @@ char *Parsebit5Data(char *p)
       }
    }
    pc += 3;
-   return p+6;
+   return p+7;
 }
 
 // ***************
