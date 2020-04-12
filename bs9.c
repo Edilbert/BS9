@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 10-Apr-2020
+Version: 12-Apr-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -823,6 +823,20 @@ struct MacroStruct
 
 char *MacPtr[MAXMAC]; // pointer inside macro body
 int Macros;           // total number of macros
+
+char Cstat[26];
+
+void MneStat(void)
+{
+   unsigned int i,j;
+
+   for (i=0 ; i < DIMOP_6309 ; ++i)
+   for (j=0 ; j < strlen(Mat[i].Mne) ; ++j)
+      ++Cstat[Mat[i].Mne[j]-'A'];
+
+   for (i=0 ; i < 26 ; ++i)
+      printf("%c:%3d\n",'A'+i,Cstat[i]);
+}
 
 // *********
 // SkipSpace
@@ -2541,6 +2555,61 @@ char *ParseStringData(char *p)
    return p;
 }
 
+// *************
+// Parsebit5Data
+// *************
+
+char *Parsebit5Data(char *p)
+{
+   char c;
+   int i,v;
+
+   p = SkipSpace(p);
+   if (strlen(p) < 6 || p[0] != '"' || p[5] != '"')
+   {
+      ErrorMsg("Need 4-character string\n");
+      ErrorLine(p);
+      exit(1);
+   }
+
+   // pack 4 characters into 20 bit
+
+   // '?' ->  0
+   // ' ' ->  1
+   // 'A' ->  2
+   // 'Z' -> 27
+   // '2' -> 28
+   // '3' -> 29
+
+   v = 0;
+   for (i=4 ; i > 0 ; --i)
+   {
+      c = p[i];
+      if (c == ' ') c = 0x40;
+      if (c == '2') c = 'Z'+1;
+      if (c == '3') c = 'Z'+2;
+      if (c < '?' || c > 'Z'+2)
+      {
+         ErrorMsg("illegal character\n");
+         ErrorLine(p);
+         exit(1);
+      }
+      v = (v << 5) | (c - '?');
+   }
+
+   if (Phase == 2)
+   {
+      if (ListOn) fprintf(lf," %6.6x       %s\n",v,Line);
+      for (i=2 ; i >= 0 ; --i)
+      {
+         Put(pc+i,v & 0xff,p);
+         v >>= 8;
+      }
+   }
+   pc += 3;
+   return p+6;
+}
+
 // ***************
 // ParseSubroutine
 // ***************
@@ -2576,6 +2645,9 @@ char *EndSub(char *p)
 
 // Functions for pseudo ops
 
+// ###
+
+char *ps_bit5(char *p)   { PrintPC(); return Parsebit5Data(p);}
 char *ps_bits(char *p)   { PrintPC(); return ParseBitData(p); }
 char *ps_bss(char *p)    { PrintPC(); return ParseBSSData(p); }
 char *ps_byte(char *p)   { PrintPC(); return ParseByteData(p); }
@@ -2667,6 +2739,7 @@ struct PseudoStruct PseudoTab[] =
    {"BITS"      , &ps_bits   },
    {"BSS"       , &ps_bss    },
    {"BYTE"      , &ps_byte   },
+   {"C5TO3"     , &ps_bit5   },
    {"CASE"      , &ps_case   },
    {"CMAP"      , &ps_cmap   },
    {"CPU"       , &ps_cpu    },
@@ -4577,7 +4650,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 10-Apr-2020         *\n");
+      printf("* Bit Shift Assembler 12-Apr-2020         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
@@ -4637,5 +4710,6 @@ int main(int argc, char *argv[])
              ErrNum, ErrNum == 1 ? "" : "S", ErrNum == 1 ? " " : "");
    else if (!Quiet) printf("* OK, no errors                           *\n");
    if (!Quiet) printf("*******************************************\n\n");
+   // MneStat();
    return ErrNum;
 }
