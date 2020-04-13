@@ -2596,7 +2596,10 @@ char *Parsebit5Data(char *p)
       }
       v = (v << 5) | (c - '?');
    }
-   if (p[5] == 'C') v |= (1 << 20);
+        if (p[5] == 'C') v |= (1 << 20);
+   else if (p[5] == 'D') v |= (2 << 20);
+   else if (p[5] == 'R') v |= (3 << 20);
+   else if (p[5] == 'W') v |= (4 << 20);
 
    if (Phase == 2)
    {
