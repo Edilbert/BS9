@@ -2707,8 +2707,8 @@ char *ps_rmb(char *p)
                "a negative amount of space: %d bytes\n", size);
       exit(1);
    }
-   pc+=size;
    PrintPCLine();
+   pc+=size;
    return p;
 }
 
