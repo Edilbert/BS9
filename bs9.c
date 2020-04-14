@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 12-Apr-2020
+Version: 14-Apr-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -3633,6 +3633,82 @@ char *GenerateCode(char *p)
       }
    }
 
+   // register - direct page bit operation
+
+   else if (strchr(p,',') && strchr(p,'.'))
+   {
+      oc = Mat[MneIndex].Opc[AM_Direct];
+      if (oc < 0)
+      {
+         ++ErrNum;
+         ErrorLine(p);
+         ErrorMsg("Illegal bit operation %s %s\n",Mat[MneIndex].Mne,OpText);
+         exit(1);
+      }
+      pb = 0xc0; // invalid
+      if (!StrNCaseCmp(p,"CC.",3))
+      {
+         pb = 0x00;
+         p += 3;
+      }
+      else if (!StrNCaseCmp(p,"A.",2))
+      {
+         pb = 0x40;
+         p += 2;
+      }
+      else if (!StrNCaseCmp(p,"B.",2))
+      {
+         pb = 0x80;
+         p += 2;
+      }
+      else
+      {
+         ++ErrNum;
+         ErrorLine(p);
+         ErrorMsg("Illegal register in bit operation %s %s\n",Mat[MneIndex].Mne,OpText);
+         exit(1);
+      }
+      i = *p++ - '0';
+      if (i < 0 || i > 7)
+      {
+         ++ErrNum;
+         ErrorLine(p);
+         ErrorMsg("Illegal bit# %d\n",i);
+         exit(1);
+      }
+      pb |= i; // add target bit
+      p = strchr(p,',') + 1; // skip after comma
+      p = EvalOperand(p,&v,0);
+      if (v != UNDEF && (v < 0 || v > 255))
+      {
+         ++ErrNum;
+         ErrorLine(p);
+         ErrorMsg("Illegal address %d\n",v);
+         exit(1);
+      }
+      p = strchr(p,'.');
+      if (!p)
+      {
+         ++ErrNum;
+         ErrorLine(p);
+         ErrorMsg("Illegal syntax in operand\n");
+         exit(1);
+      }
+      ++p;
+      i = *p++ - '0';
+      if (i < 0 || i > 7)
+      {
+         ++ErrNum;
+         ErrorLine(p);
+         ErrorMsg("Illegal bit# %d\n",i);
+         exit(1);
+      }
+      pb |= (i<<3); // add source bit
+      ol = 2;
+      ql = 1;
+      il = 4;
+   }
+
    // indexed address mode
 
    else if (strchr(p,','))
@@ -4654,7 +4730,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 12-Apr-2020         *\n");
+      printf("* Bit Shift Assembler 14-Apr-2020         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
