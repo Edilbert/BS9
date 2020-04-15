@@ -3116,8 +3116,6 @@ int SetPostByte(char *p, int *v)
       ++p;
       if (df) fprintf(df,"is indirect <%s>\n",p);
    }
-   ind = 0x10 * (*p == '[');
-   if (ind) ++p;
 
    if (df && strlen(p) > 2)
       fprintf(df,"Check R,R: %c%c%c\n",toupper(p[0]),p[1],toupper(p[2]));
@@ -3224,12 +3222,12 @@ int SetPostByte(char *p, int *v)
       ql = 0; // no address
       if (reg == 0xf) // W register
       {
-         if (df) fprintf(df,"zero offset amo=%2.2x\n",amo);
               if (amo == 4) reg = 0x8f; // ,W
          else if (amo == 1) reg = 0xcf; // ,W++
          else if (amo == 3) reg = 0xef; // ,--W
          else OperandError(p);
-         if (ind) reg = (reg & 0xf0) + 0x10;
+         if (ind) reg +=1;
+         if (df) fprintf(df,"W pb = %2.2x ind = %2.2x\n",reg,ind);
          return reg;
       }
       return (0x80 | reg | ind | amo);
