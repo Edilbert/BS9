@@ -3278,20 +3278,21 @@ int ScanPushList(char *p)
 
    if (!strcmpword(p,"ALL")) return 0xff;
    v = 0;
-   while (*p && *p != ' ')
+   while (*p)
    {
       for (i=9 ; i >= 0 ; --i) // Scan DP before D
       {
          Reg = PushList[i].Reg;
          l = strlen(Reg);
-   if (df) fprintf(df,"push list [%s] <%s>\n",p,Reg);
+         if (df) fprintf(df,"push list [%s] <%s>\n",p,Reg);
          if (!strcmpword(p,Reg)) break;
       }
       if (i < 0) OperandError(p);
       v |= PushList[i].Val;
-      p += l;
+      p = SkipSpace(p+l);
       if (*p != ',' && *p != 0) OperandError(p);
       if (*p == ',') ++p;
+      p = SkipSpace(p);
    }
    return v;
 }
@@ -3635,6 +3636,7 @@ char *GenerateCode(char *p)
 
    else if (strchr(p,',') && strchr(p,'.'))
    {
+      if (df) fprintf(df,"Check bit op <%s>\n",p);
       oc = Mat[MneIndex].Opc[AM_Direct];
       if (oc < 0)
       {
@@ -3675,8 +3677,17 @@ char *GenerateCode(char *p)
          exit(1);
       }
       pb |= i; // add target bit
-      p = strchr(p,',') + 1; // skip after comma
-      p = EvalOperand(p,&v,0);
+      p = strchr(p,','); // skip after comma
+      q = strrchr(p,'.'); // search bit field
+      if (!p || !q)
+      {
+         ++ErrNum;
+         ErrorLine(p);
+         ErrorMsg("Illegal syntax in bit operand\n");
+         exit(1);
+      }
+      *q = 0; // separate bit number from address
+      p = EvalOperand(p+1,&v,0);
       if (v != UNDEF && (v < 0 || v > 255))
       {
          ++ErrNum;
@@ -3684,16 +3695,7 @@ char *GenerateCode(char *p)
          ErrorMsg("Illegal address %d\n",v);
          exit(1);
       }
-      p = strchr(p,'.');
-      if (!p)
-      {
-         ++ErrNum;
-         ErrorLine(p);
-         ErrorMsg("Illegal syntax in operand\n");
-         exit(1);
-      }
-      ++p;
-      i = *p++ - '0';
+      i = q[1] - '0';
       if (i < 0 || i > 7)
       {
          ++ErrNum;
