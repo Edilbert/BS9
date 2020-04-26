@@ -4644,6 +4644,7 @@ int main(int argc, char *argv[])
            if (!strcmp(argv[ic],"-x")) SkipHex    = 1;
       else if (!strcmp(argv[ic],"-d")) Debug      = 1;
       else if (!strcmp(argv[ic],"-i")) IgnoreCase = 1;
+      else if (!strcmp(argv[ic],"-m")) CodeStyle  = 1;
       else if (!strcmp(argv[ic],"-n")) WithLiNo   = 1;
       else if (!strcmp(argv[ic],"-o")) Optimize   = 1;
       else if (!strcmp(argv[ic],"-p")) Preprocess = 1;
@@ -4671,18 +4672,19 @@ int main(int argc, char *argv[])
       }
       else
       {
-         printf("\nUsage: bs9 [-d -D -i -x] <source>\n");
+         printf("\nUsage: bs9 [options] <source>\n");
          exit(1);
       }
    }
    if (!argsrc)
    {
       printf("*** missing filename for assembler source file ***\n");
-      printf("\nUsage: bs9 [-d -D -i -l preset -n -x] <source>\n");
+      printf("\nUsage: bs9 [-d -D -i -l preset -m -n -o -x] <source>\n");
       printf("   -d print details in file <Debug.lst>\n");
       printf("   -D Define symbols\n");
       printf("   -i ignore case in symbols\n");
       printf("   -l preset value for memory\n");
+      printf("   -m Motorola codestyle: blank = field separator\n");
       printf("   -n include line numbers in listing\n");
       printf("   -o optimize long branches and jumps\n");
       printf("   -p print preprocessed source\n");
