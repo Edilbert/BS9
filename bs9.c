@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 14-Apr-2020
+Version: 01-May-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -2709,6 +2709,7 @@ char *ps_rmb(char *p)
    }
    PrintPCLine();
    pc+=size;
+   p += strlen(p);
    return p;
 }
 
@@ -2784,15 +2785,13 @@ char *CheckPseudo(char *p)
    if (!strcmpword(p,PseudoTab[i].keyword))
    {
       p = PseudoTab[i].foo(p+strlen(PseudoTab[i].keyword));
-      p += strlen(p); // ignore trailing characters
-      break;
-   }
-
-   if (pc > 0x10000)
-   {
-      ErrorMsg("Program counter overflow\n");
-      ErrorLine(p);
-      exit(1);
+      if (pc > 0x10000)
+      {
+         ErrorMsg("Program counter overflow\n");
+         ErrorLine(p);
+         exit(1);
+      }
+      return NULL; // flag for pseudo op processed
    }
    return p;
 }
@@ -4284,7 +4283,8 @@ void ParseLine(char *cp)
       }
    }
 
-   cp = CheckPseudo(cp);           // Pseudo Ops
+   cp = CheckPseudo(cp);
+   if (!cp) return;      // Pseudo Op successfull processed
    if (*cp == '.' || *cp == '_' || isalpha(*cp)) // Macro, Label or mnemonic
    {
       if (StrMatch(cp,"MACRO"))
@@ -4323,7 +4323,8 @@ void ParseLine(char *cp)
    if (*cp ==  0 ) return;             // No code
    if (*cp == ';') return;             // No code
    if (*cp == '&') cp = SetBSS(cp);    // Set BSS counter
-   cp = CheckPseudo(cp);        // Pseudo Ops
+   cp = CheckPseudo(cp);
+   if (!cp) return;      // Pseudo Op successfull processed
    if (MneIndex < 0) MneIndex = IsInstruction(cp); // Check for mnemonic after label
    if (MneIndex >= 0)
    {
@@ -4732,7 +4733,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 14-Apr-2020         *\n");
+      printf("* Bit Shift Assembler 01-May-2020         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
