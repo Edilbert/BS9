@@ -1,3 +1,4 @@
+
 /*
 
 *******************
@@ -305,7 +306,7 @@ void Put(int i, int v, char *p)
 // StrCaseStr
 // **********
 
-char *StrCaseStr(char *s1, char *s2)
+char *StrCaseStr(char *s1, const char *s2)
 {
    char h1[MAX_STR];
    char h2[MAX_STR];
@@ -358,7 +359,7 @@ void *ReallocOrDie(void *p, size_t size)
 // AssertFileOp
 // ************
 
-void *AssertFileOp(void *p, const char *msg)
+FILE *AssertFileOp(FILE *p, const char *msg)
 {
    if (p) return p;
    perror(msg);
@@ -369,16 +370,16 @@ void *AssertFileOp(void *p, const char *msg)
 // StrNDup
 // *******
 
-void *StrNDup(void *src, unsigned int n)
+char *StrNDup(void *src, unsigned int n)
 {
-   void *dst;
+   char *dst;
    if (n > MAX_STR)
    {
       fprintf(stderr,"*** tried to allocate %d bytes for string\n",n);
       fprintf(stderr,"*** current maximum length is %d\n",MAX_STR);
       exit(1);
    }
-   dst = MallocOrDie(n+1);
+   dst = (char *)MallocOrDie(n+1);
    memmove(dst,src,n);
    return dst;
  }
@@ -644,19 +645,19 @@ int DimOp = DIMOP_6309;
 // register Q is not included, it appears never as operand
 // and is only part of the mnemonic
 
-char *Register_6309[] =
+const char *Register_6309[] =
 {
 //  0   1   2   3   4   5    6   7   8   9    A    B   C   D   E   F
    "D","X","Y","U","S","PC","W","V","A","B","CC","DP","*","0","E","F"
 };
 
-char *Register_6809[] =
+const char *Register_6809[] =
 {
 //  0   1   2   3   4   5    6   7   8   9    A    B   C   D   E   F
    "D","X","Y","U","S","PC","-","-","A","B","CC","DP","*","*","-","-"
 };
 
-char **RegisterNames = Register_6309;
+const char **RegisterNames = Register_6309;
 
 struct PushStruct
 {
@@ -848,7 +849,7 @@ char *SkipSpace(char *p)
    return p;
 }
 
-char *StrMatch(char *s, char *m)
+char *StrMatch(char *s, const char *m)
 {
    int i,j,k,l;
 
@@ -870,7 +871,7 @@ char *StrMatch(char *s, char *m)
 // Make sure, it's not part of a larger word
 // by checking the characters before and after
 
-char *StrKey(char *s, char *m)
+char *StrKey(char *s, const char *m)
 {
    char *r = StrMatch(s,m);
    if (r) // match was true
@@ -1019,7 +1020,7 @@ void ErrorMsg(const char *format, ...) {
    va_list args;
    char *buf;
 
-   buf = MallocOrDie(SIZE_ERRMSG);
+   buf = (char *)MallocOrDie(SIZE_ERRMSG);
    snprintf(buf, SIZE_ERRMSG, "\n*** Error in file %s line %d:\n",
          IncludeStack[IncludeLevel].Src, LiNo);
    va_start(args,format);
@@ -1373,10 +1374,10 @@ char *DefineLabel(char *p, int *val, int Locked)
       if (j < 0)
       {
          j = Labels;
-         lab[j].Name = StrNDup(Label,l);
+         lab[j].Name = (char *)StrNDup(Label,l);
          lab[j].Address = UNDEF;
-         lab[j].Ref = MallocOrDie(sizeof(int));
-         lab[j].Att = MallocOrDie(sizeof(int));
+         lab[j].Ref = (int *)MallocOrDie(sizeof(int));
+         lab[j].Att = (int *)MallocOrDie(sizeof(int));
          Labels++;
       }
       lab[j].Ref[0] = LiNo;
@@ -1430,10 +1431,10 @@ char *DefineLabel(char *p, int *val, int Locked)
       if (j < 0)
       {
          j = Labels;
-         lab[j].Name = StrNDup(Label,l);
+         lab[j].Name = (char *)StrNDup(Label,l);
          lab[j].Address = UNDEF;
-         lab[j].Ref = MallocOrDie(sizeof(int));
-         lab[j].Att = MallocOrDie(sizeof(int));
+         lab[j].Ref = (int *)MallocOrDie(sizeof(int));
+         lab[j].Att = (int *)MallocOrDie(sizeof(int));
          Labels++;
       }
       lab[j].Ref[0] = LiNo;
@@ -1457,10 +1458,10 @@ char *DefineLabel(char *p, int *val, int Locked)
       if (j < 0)
       {
          j = Labels;
-         lab[j].Name = StrNDup(Label,l);
+         lab[j].Name = (char *)StrNDup(Label,l);
          lab[j].Address = pc;
-         lab[j].Ref = MallocOrDie(sizeof(int));
-         lab[j].Att = MallocOrDie(sizeof(int));
+         lab[j].Ref = (int *)MallocOrDie(sizeof(int));
+         lab[j].Att = (int *)MallocOrDie(sizeof(int));
          Labels++;
       }
       else if (lab[j].Address == UNDEF) lab[j].Address = pc;
@@ -1495,9 +1496,9 @@ void SymRefs(int i)
 
    if (Phase != 2) return;
    n = ++lab[i].NumRef;
-   lab[i].Ref = ReallocOrDie(lab[i].Ref,(n+1)*sizeof(int));
+   lab[i].Ref = (int *)ReallocOrDie(lab[i].Ref,(n+1)*sizeof(int));
    lab[i].Ref[n] = LiNo;
-   lab[i].Att = ReallocOrDie(lab[i].Att,(n+1)*sizeof(int));
+   lab[i].Att = (int *)ReallocOrDie(lab[i].Att,(n+1)*sizeof(int));
    lab[i].Att[n] = am;
 }
 
@@ -1645,15 +1646,9 @@ char *ParseRealData(char *p)
 char *EvalHexValue(char *p, int *v)
 {
    char *EndPtr;
-   *v = strtol(p,&EndPtr,16);
-/*
-   if (EndPtr == p || *v < 0 || *v > 0xffff)
-   {
-      ErrorLine(p);
-      ErrorMsg("Illegal hex value\n");
-      exit(1);
-   }
-*/
+   long long lol;
+   lol = strtoll(p,&EndPtr,16);
+   *v = lol & 0xffffffff;
    return EndPtr;
 }
 
@@ -2131,7 +2126,7 @@ char *IncludeFile(char *p)
    }
    IncludeStack[IncludeLevel].LiNo = LiNo;
    IncludeStack[++IncludeLevel].fp = sf;
-   IncludeStack[IncludeLevel].Src = StrNDup(FileName,strlen(FileName));
+   IncludeStack[IncludeLevel].Src = (char *)StrNDup(FileName,strlen(FileName));
    PrintLine();
    LiNo = 0;
    return p+1; // skip quote after filename
@@ -2175,7 +2170,7 @@ char *ParseStoreData(char *p)
    }
    EndPtr = ++p;
    while (*EndPtr != '\0' && *EndPtr != '"') ++EndPtr;
-   Filename = StrNDup(p, EndPtr - p);
+   Filename = (char *)StrNDup(p, EndPtr - p);
    FileFormat = BINARY;
    Entry = -1;
    p = NeedChar(EndPtr,',');
@@ -2256,7 +2251,7 @@ char *ParseLoadData(char *p)
    }
    EndPtr = ++p;
    while (*EndPtr != '\0' && *EndPtr != '"') ++EndPtr;
-   Filename = StrNDup(p, EndPtr - p);
+   Filename = (char *)StrNDup(p, EndPtr - p);
    if (df) fprintf(df,"Loading %4.4x <%s>\n",Start,Filename);
    PrintLine();
    lp = fopen(Filename,"rb");
@@ -2734,7 +2729,7 @@ char *ps_setdp(char *p)
 
 struct PseudoStruct
 {
-   char *keyword;
+   const char *keyword;
    char *(*foo)(char *);
 };
 
@@ -2832,9 +2827,9 @@ void AddLabel(char *p)
    }
 
    lab[Labels].Address = UNDEF;
-   lab[Labels].Name = StrNDup(p,l);
-   lab[Labels].Ref = MallocOrDie(sizeof(int));
-   lab[Labels].Att = MallocOrDie(sizeof(int));
+   lab[Labels].Name = (char *)StrNDup(p,l);
+   lab[Labels].Ref = (int *)MallocOrDie(sizeof(int));
+   lab[Labels].Att = (int *)MallocOrDie(sizeof(int));
    lab[Labels].Ref[0] = LiNo;
    lab[Labels].Att[0] = 0;
    Labels++;
@@ -4050,7 +4045,7 @@ void RecordMacro(char *p)
    if (j < 0)  // create new entry in macro table
    {
       j = Macros;
-      Mac[j].Name = StrNDup(Macro,l);
+      Mac[j].Name = (char *)StrNDup(Macro,l);
       Mac[j].Narg = an;
       Mac[j].Type = mf;
       fgets(Line,sizeof(Line),sf);
@@ -4093,12 +4088,12 @@ void RecordMacro(char *p)
          if (bl == 1)
          {
             bl = l+1;
-            Mac[j].Body = StrNDup(Buf,l);
+            Mac[j].Body = (char *)StrNDup(Buf,l);
          }
          else
          {
             bl += l;
-            Mac[j].Body = ReallocOrDie(Mac[j].Body,bl);
+            Mac[j].Body = (char *)ReallocOrDie(Mac[j].Body,bl);
             strcat(Mac[j].Body,Buf);
          }
          fgets(Line,sizeof(Line),sf);
@@ -4354,7 +4349,7 @@ void Phase1Listing(void)
 
 int CloseInclude(void)
 {
-   char *msg = "Close INCLUDE file";
+   const char *msg = "Close INCLUDE file";
 
    PrintLiNo();
    if (Phase == 2)
@@ -4546,7 +4541,7 @@ void WriteBinaryFormat(int i)
     if (fclose(bf)) AssertFileOp(NULL, msg);
 }
 
-void WriteS19Line(FILE *bf, char *RecordType, int PayloadSize, int Address, unsigned char *Data)
+void WriteS19Line(FILE *bf, const char *RecordType, int PayloadSize, int Address, unsigned char *Data)
 {
    int i,Checksum;
    const char *msg = "Write S19 record";
@@ -4575,7 +4570,7 @@ void WriteS19Format(int i)
     int UnwrittenBytes,Addr,BytesInThisLine;
     const char *msg = "Write S19 file";
 
-    filename = StrNDup(SFF[i],strlen(SFF[i]) + 4);
+    filename = (char *)StrNDup(SFF[i],strlen(SFF[i]) + 4);
     ExtPtr = strrchr(filename, '.');
     if (!ExtPtr)
     {
@@ -4708,7 +4703,7 @@ int main(int argc, char *argv[])
 
    if (l > 4 && argsrc[l-4] == '.')
    {
-      Src = StrNDup(argsrc,l);
+      Src = (char *)StrNDup(argsrc,l);
       l -= 4; // length of basename
    }
    else
