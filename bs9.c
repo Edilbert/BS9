@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 01-May-2020
+Version: 15-May-2020
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -1075,7 +1075,7 @@ void PrintOC(int v)
 
    if (oc == 0xcd) // LDQ immediate
    {
-      fprintf(lf," cd %4.4x %4.4x",v>>16,v&0xffff);
+      fprintf(lf," cd %4.4x %4.4x",(v>>16)&0xffff,v&0xffff);
       return;
    }
 
@@ -4733,7 +4733,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 01-May-2020         *\n");
+      printf("* Bit Shift Assembler 15-May-2020         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
