@@ -1564,24 +1564,20 @@ int Hex2Byte(char hex[])
 char *ParseRealData(char *p)
 {
 
-   int i,v,mansize;
+   unsigned int v;
+   int i,mansize;
    int Sign,Exponent;
-   union udb
-   {
-     double d;
-     unsigned char b[8];
-   } db;
+   double d;
 
    mansize = 3; // default mantissa size
 
    p = SkipSpace(p);
-
-   for (i=0 ; i < 8 ; ++i) Operand[i] = 0;
+   memset(Operand,0,sizeof(Operand));
 
    if (*p == '$')
    {
       ++p;
-      for (i=0 ; i < mansize+1 ; ++i, p+=2)
+      for (i=0 ; i <= mansize ; ++i, p+=2)
       {
           v = Hex2Byte(p);
           if (v < 0) break;
@@ -1590,18 +1586,36 @@ char *ParseRealData(char *p)
    }
    else
    {
-      db.d = atof(p);
-      Sign = db.b[7] & 0x80;
-      Exponent = (((db.b[7] & 0x7f) << 4) | (db.b[6] >> 4)) - 0x3ff + 0x81;
+      d = strtod(p,NULL);
+      if (d != 0)
+      {
+         Sign = 0;
+         if (d < 0)
+         {
+            Sign = 0x80;
+            d = -d;
+         }
+         d = frexp(d,&Exponent);
+         Exponent += 0x80;
+         if (Exponent < 1 || Exponent > 255)
+         {
+            ErrorMsg("Exponent %d out of range\n",Exponent);
+            ++ErrNum;
+            return p+strlen(p);;
+         }
+         Operand[0] = Exponent;
+         d *= 256;
+         v = d;
+         Operand[1] = (v & 127) | Sign;
+         d -= v;
 
-      Operand[0] = Exponent;
-      Operand[1] = ((db.b[6] & 0x0f) << 3) | (db.b[5] >> 5) | Sign;
-      Operand[2] = ((db.b[5] & 0x1f) << 3) | (db.b[4] >> 5);
-      Operand[3] = ((db.b[4] & 0x1f) << 3) | (db.b[3] >> 5);
-      Operand[4] = ((db.b[3] & 0x1f) << 3) | (db.b[2] >> 5);
-      Operand[5] = ((db.b[2] & 0x1f) << 3) | (db.b[1] >> 5);
-
-      if (db.d == 0.0) for (i=0 ; i < 8 ; ++i) Operand[i] = 0;
+         for (i=2 ; i < 6 ; ++i)
+         {
+            d *= 256;
+            Operand[i] = v = d;
+            d -= v;
+         }
+      }
    }
 
    // Round
