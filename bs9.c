@@ -1564,7 +1564,7 @@ int Hex2Byte(char hex[])
 char *ParseRealData(char *p)
 {
 
-   unsigned int v;
+   int v;
    int i,mansize;
    int Sign,Exponent;
    double d;
