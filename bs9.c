@@ -1,11 +1,10 @@
-
 /*
 
 *******************
 Bit Shift Assembler
 *******************
 
-Version: 15-May-2020
+Version: 21-May-2021
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -280,6 +279,12 @@ unsigned char LOCK[0x10100]; // binary
 int ErrNum;          // error count
 int ListOn = 1;      // listing control
 
+FILE *sf; // source       file
+FILE *lf; // listing      file
+FILE *df; // debug        file
+FILE *pf; // preprocessed file
+FILE *of; // object       file
+
 // forward references
 
 void AddLabel(char *p);
@@ -296,6 +301,8 @@ void Put(int i, int v, char *p)
       ++ErrNum;
       if (p) ErrorLine(p);
       ErrorMsg("Tried to overwrite address %4.4x\n",i);
+      if (df) fprintf(df,"LOCK[%4.4x]=%x  ROM[%4.4x]=%x  v=%4.4x\n",
+                         i,LOCK[i],i,ROM[i],v);
       exit(1);
    }
    ROM[i]  = v;
@@ -753,12 +760,6 @@ int StoreCount = 0;  // number of segments to store
 enum OutfileFormat { BINARY, SRECORD };
 
 signed char ADL[0x10000];
-
-FILE *sf; // source       file
-FILE *lf; // listing      file
-FILE *df; // debug        file
-FILE *pf; // preprocessed file
-FILE *of; // object       file
 
 // organize nesting of include files
 
@@ -2861,6 +2862,7 @@ void SetInstructionLength(char *p)
       if (oc < 256)  Put(pc,oc,p);
       else
       {
+         if (df) fprintf(df,"Put ROM[%4.4x] = %4.4x\n",pc,oc);
          Put(pc  ,oc >> 8  ,p);
          Put(pc+1,oc & 0xff,p);
       }
@@ -2879,7 +2881,7 @@ void SetInstructionLength(char *p)
       ADL[pc] = il;
       for (i=1 ; i < il ; ++i) ADL[pc+i] = -1;
    }
-   if (df) fprintf(df,"lock oc = %4.2x il = %d\n",oc,il);
+   if (df) fprintf(df,"lock oc = %4.2x il = %d ol = %d\n",oc,il,ol);
 }
 
 
@@ -3342,6 +3344,9 @@ char *GenerateCode(char *p)
          exit(1);
       }
       p   = EvalOperand(p,&v,0);
+
+      // make pseudo 16 bit opcode with embedded immediate value
+
       XIM = ((Mat[MneIndex].Opc[AM_Extended] << 8) | (v & 0xff));
       ol  = 2;
       if (*p == ',') ++p;
@@ -3352,6 +3357,7 @@ char *GenerateCode(char *p)
          exit(1);
       }
       v = UNDEF;
+      oc = XIM;
    }
 
    // inherent instruction (no operand)
@@ -3722,6 +3728,7 @@ char *GenerateCode(char *p)
    else if (strchr(p,','))
    {
       oc = Mat[MneIndex].Opc[AM_Indexed];
+      if (df) fprintf(df,"indexed am oc = %4.4x\n",oc);
       if (oc < 0)
       {
          ++ErrNum;
@@ -3740,29 +3747,45 @@ char *GenerateCode(char *p)
    {
       p = EvalOperand(p,&v,0);
 
+      if (XIM)
+      {
+         ol = 2;
+         if (v > 255)
+         {
+            oc = XIM;
+            ql = 2;
+         }
+         else
+         {
+            oc = XIM & 0xfff; // extended -> direct
+            ql = 1;
+         }
+         il = ol + ql;
+         if (df) fprintf(df,"XIM oc = %4.4x  v = %4.4x\n",oc,v);
+      }
+
       if (Phase == 2) // opcode and instruction length is set in phase 1
       {
          if (XIM)
          {
-            oc = XIM;
-            ol = 2;
+            if (df) fprintf(df,"ROM oc = %4.4x  v = %4.4x\n",oc,v);
          }
          else
          {
             oc = ROM[pc];
+            if (df) fprintf(df,"ROM oc = %4.4x  v = %4.4x\n",oc,v);
             ol = 1 + (oc == 0x10 || oc == 0x11);
             if (ol == 2) oc = (oc << 8) | ROM[pc+1];
+            il = ADL[pc];
+            ql = il - ol;
+            if (ForcedMode < 0) v &= 0xff;
          }
-         il = ADL[pc];
-         ql = il - ol;
-         if (ForcedMode < 0) v &= 0xff;
       }
       else
       {
          // extended address mode
 
-         if (XIM) oc = XIM;
-         else     oc = Mat[MneIndex].Opc[AM_Extended];
+         if (!XIM) oc = Mat[MneIndex].Opc[AM_Extended];
          if (oc >= 0)
          {
             // assume extended mode
