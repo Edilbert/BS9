@@ -3727,7 +3727,8 @@ char *GenerateCode(char *p)
 
    else if (strchr(p,','))
    {
-      oc = Mat[MneIndex].Opc[AM_Indexed];
+      if (XIM) oc = XIM & 0xefff; // extended -> indexed
+      else oc = Mat[MneIndex].Opc[AM_Indexed];
       if (df) fprintf(df,"indexed am oc = %4.4x\n",oc);
       if (oc < 0)
       {
@@ -3736,8 +3737,10 @@ char *GenerateCode(char *p)
          ErrorMsg("Illegal indexed instruction %s %s\n",Mat[MneIndex].Mne,OpText);
          exit(1);
       }
-      pb = SetPostByte(OpText,&v);
-      ol = 1 + (oc > 255); // opcode length
+      pb = SetPostByte(p,&v);
+
+      if (XIM) ol = 2;
+      else     ol = 1 + (oc > 255); // opcode length
       il = ol + 1 + ql;    // opcode + postbyte + address
    }
 
