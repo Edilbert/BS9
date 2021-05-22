@@ -295,14 +295,14 @@ void ErrorMsg(const char *format, ...);
 
 void Put(int i, int v, char *p)
 {
+   if (df) fprintf(df,"LOCK[%4.4x]=%x  ROM[%4.4x]=%x  v=%4.4x\n",
+                      i,LOCK[i],i,ROM[i],v);
    v &= 0xff;
    if (LOCK[i] && ROM[i] != v)
    {
       ++ErrNum;
       if (p) ErrorLine(p);
       ErrorMsg("Tried to overwrite address %4.4x\n",i);
-      if (df) fprintf(df,"LOCK[%4.4x]=%x  ROM[%4.4x]=%x  v=%4.4x\n",
-                         i,LOCK[i],i,ROM[i],v);
       exit(1);
    }
    ROM[i]  = v;
@@ -2891,6 +2891,8 @@ void Synchronize(void)
    if (df) fprintf(df,"oc = %4.2x ol=%d ql=%d il=%d\n",oc,ol,ql,il);
    if (df && nops) fprintf(df,"Add %d NOP's\n",nops);
    il = ADL[pc];
+   if (df) fprintf(df,"SYnc lock[%4.4x] = %d\n",pc,LOCK[pc]);
+   if (nops) LOCK[pc] = 0;
 }
 
 
@@ -3864,10 +3866,10 @@ char *GenerateCode(char *p)
    }
 
    if (Phase == 1) SetInstructionLength(p);
-   if (Phase == 2) Synchronize();
 
    if (Phase == 2)
    {
+      Synchronize();
       if (v == UNDEF && ql > 0)
       {
          ErrorLine(p);
@@ -3877,6 +3879,7 @@ char *GenerateCode(char *p)
 
       // insert binary code
 
+      if (df) fprintf(df,"PUT OC = %4.4x\n",oc);
       if (oc > 255) // two byte opcode
       {
          Put(pc,oc >> 8,p);
@@ -3913,7 +3916,7 @@ char *GenerateCode(char *p)
          Put(pc+ibi++,v,p);
       }
 
-      for (i=0 ; i < nops ; ++i) Put(ibi++,0x12,p); // NOP
+      for (i=0 ; i < nops ; ++i) Put(pc+ibi++,0x12,p); // NOP
 
       if (ListOn)
       {
