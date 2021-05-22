@@ -3766,13 +3766,16 @@ char *GenerateCode(char *p)
             ql = 1;
          }
          il = ol + ql;
-         if (df) fprintf(df,"XIM oc = %4.4x  v = %4.4x\n",oc,v);
+         if (df) fprintf(df,"XIM oc = %4.4x  v = %4.4x il = %d\n",oc,v,il);
       }
 
       if (Phase == 2) // opcode and instruction length is set in phase 1
       {
          if (XIM)
          {
+            oc = (ROM[pc] << 8) + ROM[pc+1];
+            il = ADL[pc];
+            ql = il - ol;
             if (df) fprintf(df,"ROM oc = %4.4x  v = %4.4x\n",oc,v);
          }
          else
@@ -3803,7 +3806,7 @@ char *GenerateCode(char *p)
 
             if (ForcedMode <= 0) // not forced extended
             {
-               if (XIM) qc = oc & 0xffff;
+               if (XIM) qc = oc & 0xfff;
                else     qc = Mat[MneIndex].Opc[AM_Direct];
 
                if (qc >= 0 && (ForcedMode < 0 ||
@@ -3813,6 +3816,7 @@ char *GenerateCode(char *p)
                   v &= 0xff;
                   ql = 1;
                   il = ol + 1;
+      if (XIM && df) fprintf(df,"XIM3 oc = %4.4x  v = %4.4x il = %d\n",oc,v,il);
                }
             }
          }
@@ -3825,6 +3829,7 @@ char *GenerateCode(char *p)
          }
       }
 
+      if (XIM && df) fprintf(df,"XIM2 oc = %4.4x  v = %4.4x il = %d\n",oc,v,il);
       if (Optimize)
       {
           // optimise JSR to BSR
