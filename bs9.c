@@ -241,6 +241,26 @@ For more examples see the complete operating system for the
 Thomson MO5 available from the user "Bit Shifter" e.g. at
 forum64 or the forum of the VzEkC.
 
+Listing
+=======
+
+The program listings lists the original source code preceded by the
+generated code in form of hexadecimal bigendian word or byte values.
+For example:
+
+  27 9ff6   b6    fe30         LDA     IO_SDCARD
+  28 9ff9 1034 8e              ANDR    A,E       ; test IO_INCD#
+  29 9ffc   27      06         BEQ     +
+  30 9ffe   8e    a096         LDX     #Msg_NOT  ; " not"
+  ^  ^    ^    ^  ^            ^       ^         ^
+  |  |    |    |  |            |       |         \- Comment
+  |  |    |    |  |            |       \----------- Operand
+  |  |    |    |  |            \------------------- Mnemonic
+  |  |    |    |  \----- Address/Value Operand (Word or Byte)
+  |  |    |    \-------- Postbyte (Byte)
+  |  |    \------------- Opcode (Word or Byte)
+  |  \------------------ Program address
+  \--------------------- Line number
 */
 
 // switch off windows warnings for string functions
