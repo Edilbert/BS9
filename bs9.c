@@ -4698,6 +4698,24 @@ const char *Stat(int o)
    else   return StatOff;
 }
 
+void usage(void)
+{
+   printf("Usage: bs9 [options] <source>\n");
+   printf("Options:\n");
+   printf("   -d print details in file <Debug.lst>\n");
+   printf("   -D Define symbols\n");
+   printf("   -i ignore case in symbols\n");
+   printf("   -h display this usage\n");
+   printf("   -l preset value for memory\n");
+   printf("   -m Motorola codestyle: blank = field separator\n");
+   printf("   -n include line numbers in listing\n");
+   printf("   -o optimize long branches and jumps\n");
+   printf("   -p print preprocessed source\n");
+   printf("   -p quiet mode\n");
+   printf("   -x assemble listing file - skip hex in front\n");
+   exit(1);
+}
+
 int main(int argc, char *argv[])
 {
    int ic,l,v;
@@ -4737,25 +4755,13 @@ int main(int argc, char *argv[])
       }
       else
       {
-         printf("\nUsage: bs9 [options] <source>\n");
-         exit(1);
+         usage();
       }
    }
    if (!argsrc)
    {
       printf("*** missing filename for assembler source file ***\n");
-      printf("\nUsage: bs9 [-d -D -i -l preset -m -n -o -x] <source>\n");
-      printf("   -d print details in file <Debug.lst>\n");
-      printf("   -D Define symbols\n");
-      printf("   -i ignore case in symbols\n");
-      printf("   -l preset value for memory\n");
-      printf("   -m Motorola codestyle: blank = field separator\n");
-      printf("   -n include line numbers in listing\n");
-      printf("   -o optimize long branches and jumps\n");
-      printf("   -p print preprocessed source\n");
-      printf("   -p quiet mode\n");
-      printf("   -x assemble listing file - skip hex in front\n");
-      exit(1);
+      usage();
    }
 
    // default file names if only source file specified:
