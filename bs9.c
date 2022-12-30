@@ -3017,7 +3017,7 @@ int RegisterSize(int n)
    if (r == 'S' || r == 'U') return 2;
    if (r == 'Q') return 4;
 
-   ErrorMsg("Illegal register name [%c]",r);
+   ErrorMsg("Illegal register name [%c]\n",r);
    exit(1);
 }
 
@@ -4340,7 +4340,7 @@ void ParseLine(char *cp)
          if (++plucnt[i] > PLUMAX-2)
          {
             ++ErrNum;
-            ErrorMsg("too many local labels");
+            ErrorMsg("too many local labels\n");
             exit(1);
          }
       }
