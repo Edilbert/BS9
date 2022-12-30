@@ -13,3 +13,4 @@ bs9.creator.user
 bs9.cxxflags
 bs9.files
 bs9.includes
+.qtc_clangd
