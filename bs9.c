@@ -3009,6 +3009,7 @@ int RegisterSize(int n)
    char r;
 
    if (!StrNCaseCmp(Mat[n].Mne,"LDMD",4)) return 1;
+   if (!StrNCaseCmp(Mat[n].Mne,"CWAI",4)) return 1;
 
    r = Mat[n].Mne[strlen(Mat[n].Mne)-1];
 
