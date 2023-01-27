@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 30-Dec-2022
+Version: 27-Jan-2023
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -1718,12 +1718,27 @@ char *EvalDecValue(char *p, int *v)
 
 char *EvalCharValue(char *p, int *v)
 {
-   *v = 0;                    // preset with chr(0)
-   if (*p != '\'') *v = *p++; // fetch one character
-   if (*p == '\'') ++p;       // optional closing apostrophe
+   if (*p == '\\')
+   {
+      ++p;
+           if (*p == 'r') *v = 13;
+      else if (*p == 'n') *v = 10;
+      else if (*p == 'a') *v =  7;
+      else if (*p == 'e') *v = 27;
+      else if (*p == '0') *v =  0;
+      else                *v = *p;
+      if (*p) ++p;
+   }
+   else *v = *p++;
+   if (*p != '\'' && *p != 0)
+   {
+      ++ErrNum;
+      ErrorMsg("Missing ' delimiter after character operand\n");
+      exit(1);
+   }
+   if (*p) ++p;
    return p;
 }
-
 
 char *EvalMultiCharValue(char *p, int *v)
 {
@@ -4803,7 +4818,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 30-Dec-2022         *\n");
+      printf("* Bit Shift Assembler 27-Jan-2023         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
