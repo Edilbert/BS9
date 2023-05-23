@@ -4401,7 +4401,7 @@ void ParseLine(char *cp)
    if (ForcedEnd)  return;
    if (*cp ==  0 ) return;             // No code
    if (*cp == ';') return;             // No code
-   if (*cp == '&') cp = SetBSS(cp);    // Set BSS counter
+   if (*cp == '&') { cp = SetBSS(cp); return; }    // Set BSS counter
    cp = CheckPseudo(cp);
    if (!cp) return;      // Pseudo Op successfull processed
    if (MneIndex < 0) MneIndex = IsInstruction(cp); // Check for mnemonic after label
