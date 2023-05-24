@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 27-Jan-2023
+Version: 24-May-2023
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -67,6 +67,48 @@ TXTPTR  = $21b8                define constant TXTPTR
 OLDPTR  EQU $21ba              define constant OLDPTR
 CURRENT SET 5                  define variable CURRENT
 
+Modules (Subroutines)
+=====================
+
+The pseudo instructions
+
+MODULE
+...
+ENDMOD
+
+or the aliases
+
+SUBROUTINE
+...
+ENDSUB
+
+define a namespace for local variables.
+Variables starting with a '.' (dot) have a scope limited to code
+between MODULE and ENDMOD.
+Example:
+
+MODULE Delay
+.loop  LEAX -1,X
+       BNE  .loop
+       RTS
+ENDMOD
+
+MODULE Strout
+.loop  LDA  ,X+
+       BEQ  .ret
+       JSR  Chrout
+       BRA  .loop
+.ret   RTS
+ENDMOD
+
+There is no conflict in using the label ".loop" twice, because they
+are used in separate modules. Internally the assembler generates the names:
+
+Delay.loop
+Strout.loop
+Strout.ret
+
+for these labels.
 
 Assign addresses to symbols
 ===========================
@@ -929,6 +971,9 @@ char *GetSymbol(char *p, char *s)
    return p;
 }
 
+// ***********
+// GetMacroArg
+// ***********
 
 char *GetMacroArg(char *p, char *s)
 {
@@ -1210,25 +1255,6 @@ char *ParseListOption(char *p)
    return p+1;
 }
 
-char *SetPC(char *p)
-{
-   if (*p == '*')
-   {
-      p = NeedChar(p,'=');
-      if (!p)
-      {
-         ++ErrNum;
-         ErrorMsg("Missing '=' in set pc * instruction\n");
-         exit(1);
-      }
-   }
-   else p += 3; // .ORG syntax
-   p = EvalOperand(p+1,&pc,0);
-   PrintPCLine();
-   if (GenStart > pc) GenStart = pc; // remember lowest pc value
-   return p;
-}
-
 char *SetBSS(char *p)
 {
    p = NeedChar(p,'=');
@@ -1243,7 +1269,7 @@ char *SetBSS(char *p)
    if (ListOn && Phase == 2)
    {
       PrintLiNo();
-      fprintf(lf,"%4.4x          %s\n",bss,Line);
+      fprintf(lf,"%4.4x              %s\n",bss,Line);
    }
    return p;
 }
@@ -2732,12 +2758,30 @@ char *ps_align(char *p)
    return p;
 }
 
+// ******
+// ps_org
+// ******
+
 char *ps_org(char *p)
 {
    ExtractOpText(p);
    EvalOperand(OpText,&pc,0);
    PrintPCLine();
    return p;
+}
+
+// *****
+// SetPC
+// *****
+
+char *SetPC(char *p)
+{
+   p = NeedChar(p,'=');
+   if (p) return ps_org(p+1);
+
+   ++ErrNum;
+   ErrorMsg("Setting PC with \"* = address\" syntax error\n");
+   exit(1);
 }
 
 char *ps_rmb(char *p)
@@ -2794,6 +2838,7 @@ struct PseudoStruct PseudoTab[] =
    {"CMAP"      , &ps_cmap   },
    {"CPU"       , &ps_cpu    },
    {"END"       , &ps_end    },
+   {"ENDMOD"    , &ps_endsub }, // alias to ENDSUB
    {"ENDSUB"    , &ps_endsub },
    {"EXTERN"    , &ps_ignore },
    {"FCB"       , &ps_byte   },
@@ -2806,6 +2851,7 @@ struct PseudoStruct PseudoTab[] =
    {"LIST"      , &ps_list   },
    {"LOAD"      , &ps_load   },
    {"LONG"      , &ps_long   },
+   {"MODULE"    , &ps_subr   }, // alias to SUBROUTINE
    {"ORG"       , &ps_org    },
    {"RMB"       , &ps_rmb    },
    {"REAL"      , &ps_real   },
@@ -4327,10 +4373,19 @@ void ParseLine(char *cp)
       }
       return;
    }
-   if (*cp == '*' || *cp == ';')  // comment only
+   if (*cp == ';')  // comment only
    {
       PrintLine();
       return;
+   }
+
+   if (*cp == '*')  // comment or setting of PC ?
+   {
+      if (!NeedChar(cp+1,'='))
+      {
+         PrintLine();  // no "* =" syntax
+         return;
+      }
    }
 
    // set local backward label
@@ -4402,6 +4457,7 @@ void ParseLine(char *cp)
    if (*cp ==  0 ) return;             // No code
    if (*cp == ';') return;             // No code
    if (*cp == '&') { cp = SetBSS(cp); return; }    // Set BSS counter
+   if (*cp == '*') { cp = SetPC(cp) ; return; }    // Set PC
    cp = CheckPseudo(cp);
    if (!cp) return;      // Pseudo Op successfull processed
    if (MneIndex < 0) MneIndex = IsInstruction(cp); // Check for mnemonic after label
@@ -4818,7 +4874,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 27-Jan-2023         *\n");
+      printf("* Bit Shift Assembler 24-May-2023         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
