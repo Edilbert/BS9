@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 24-May-2023
+Version: 31-May-2023
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -934,6 +934,10 @@ char *StrMatch(char *s, const char *m)
 // Make sure, it's not part of a larger word
 // by checking the characters before and after
 
+// ******
+// StrKey
+// ******
+
 char *StrKey(char *s, const char *m)
 {
    char *r = StrMatch(s,m);
@@ -944,6 +948,10 @@ char *StrKey(char *s, const char *m)
    }
    return r;
 }
+
+// ****
+// isym
+// ****
 
 int isym(char c)
 {
@@ -1219,7 +1227,9 @@ int IsInstruction(char *p)
 
 char *NeedChar(char *p, char c)
 {
-   return strchr(p,c);
+   p = SkipSpace(p);
+   if (*p == c) return p;
+   return NULL;
 }
 
 
@@ -4456,8 +4466,8 @@ void ParseLine(char *cp)
    if (ForcedEnd)  return;
    if (*cp ==  0 ) return;             // No code
    if (*cp == ';') return;             // No code
-   if (*cp == '&') { cp = SetBSS(cp); return; }    // Set BSS counter
-   if (*cp == '*') { cp = SetPC(cp) ; return; }    // Set PC
+   if (*cp == '&') { cp = SetBSS(cp+1); return; }    // Set BSS counter
+   if (*cp == '*') { cp = SetPC(cp+1) ; return; }    // Set PC
    cp = CheckPseudo(cp);
    if (!cp) return;      // Pseudo Op successfull processed
    if (MneIndex < 0) MneIndex = IsInstruction(cp); // Check for mnemonic after label
@@ -4874,7 +4884,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 24-May-2023         *\n");
+      printf("* Bit Shift Assembler 31-May-2023         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
