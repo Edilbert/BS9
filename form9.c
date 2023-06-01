@@ -399,6 +399,7 @@ void Usage(void)
    fprintf(stderr,"   -p print pseudos   in upper case\n");
    fprintf(stderr,"   -m col   mnemonic/pseudo  column ( 8)\n");
    fprintf(stderr,"   -a col   argument/operand column (16)\n");
+   fprintf(stderr,"   -e col   equate column           (16)\n");
    fprintf(stderr,"   -c col  code line comment column (32)\n");
    exit(1);
 }
@@ -538,7 +539,7 @@ int main(int argc, char *argv[])
             exit(1);
          }
       }
-      else if (!strcmp(argv[ic],"-o"))
+      else if (!strcmp(argv[ic],"-a"))
       {
          ocol = atoi(argv[++ic]);
          if (ocol != -1 && (ocol > 72 || ocol < mcol+5))
