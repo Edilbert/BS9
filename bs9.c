@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 31-May-2023
+Version: 01-Jun-2023
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -2512,6 +2512,10 @@ char *ParseASCII(char *p, unsigned char b[], int *l)
    return p;
 }
 
+// *************
+// ParseByteData
+// *************
+
 char *ParseByteData(char *p)
 {
    int i,j,l,v;
@@ -2588,53 +2592,6 @@ char *ParseByteData(char *p)
    return p;
 }
 
-
-char *ParseStringData(char *p)
-{
-   int i,j,l;
-   unsigned char ByteBuffer[ML];
-
-   p = SkipSpace(p);
-   l = 0;
-   p = ParseASCII(p,ByteBuffer,&l);
-   if (df)
-   {
-      fprintf(df,"FCC String $%4.4x:<",pc);
-      for (j=0 ; j < l ; ++j) fprintf(df,"%c",ByteBuffer[j]&0x7f);
-      fprintf(df,"> [%d]\n",l);
-   }
-
-   if (l < 1)
-   {
-      ErrorMsg("Missing FCC data\n");
-      ErrorLine(p);
-      exit(1);
-   }
-
-   j = AddressIndex(pc);
-   if (j >= 0)
-   for ( ; j < Labels ; ++j) // There may be multiple lables on this address
-   {
-       if (lab[j].Address == pc) lab[j].Bytes = l;
-   }
-   if (j >= 0 && df) fprintf(df,"FCC label [%s] $%4.4x $%4.4x %d bytes\n",
-                   lab[j].Name,lab[j].Address,pc,l);
-   if (Phase == 2)
-   {
-      for (i=0 ; i < l ; ++i)
-      {
-         Put(pc+i,ByteBuffer[i],p);
-         if (ListOn && i < 4) fprintf(lf," %2.2x",ByteBuffer[i]);
-      }
-      if (ListOn)
-      {
-         for (i=l ; i < 4 ; ++i) fprintf(lf,"   ");
-         fprintf(lf,"  %s\n",Line);
-      }
-   }
-   pc += l;
-   return p;
-}
 
 // *************
 // Parsebit5Data
@@ -2751,7 +2708,7 @@ char *ps_long(char *p)   { PrintPC(); return ParseLongData(p); }
 char *ps_real(char *p)   { PrintPC(); return ParseRealData(p); }
 char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
 char *ps_store(char *p)  {            return ParseStoreData(p); }
-char *ps_string(char *p) { PrintPC(); return ParseStringData(p); }
+char *ps_string(char *p) { PrintPC(); return ParseByteData(p); }
 char *ps_subr(char *p)   { PrintPC(); return ParseSubroutine(p); }
 char *ps_word(char *p)   { PrintPC(); return ParseWordData(p); }
 
@@ -4884,7 +4841,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 31-May-2023         *\n");
+      printf("* Bit Shift Assembler 01-Jun-2023         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
