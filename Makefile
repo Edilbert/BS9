@@ -22,6 +22,8 @@ $(EXE2): form9.c
 
 install:
 	install $(EXE) $(PREFIX)/bin
+	install $(EXE2) $(PREFIX)/bin
+
 clean:
 	rm -f $(EXE) $(EXE2)
 
