@@ -943,8 +943,8 @@ char *StrKey(char *s, const char *m)
    char *r = StrMatch(s,m);
    if (r) // match was true
    {
-      if (r > s && isalnum(*(r-1))) r = NULL; // check before
-      if (isalnum(*(r+strlen(m))))  r = NULL; // check after
+      if ((r > s && isalnum(*(r-1))) ||       // check before
+         (isalnum(*(r+strlen(m))))) r = NULL; // check after
    }
    return r;
 }
@@ -1409,6 +1409,7 @@ char *DefineLabel(char *p, int *val, int Locked)
       ErrorMsg("Too many labels (> %d)\n",MAXLAB);
       exit(1);
    }
+// if (df) fprintf(df,"GetSymbol(%s)\n",p);
    p = GetSymbol(p,Label);
    if (*p == ':') ++p; // Ignore colon after label
    l = strlen(Label);
@@ -2437,7 +2438,7 @@ char *ParseBitData(char *p)
    {
       PrintPC();
       Put(pc,v,p);
-      fprintf(lf," %2.2x       ",v);
+      fprintf(lf," %2.2x           ",v);
       fprintf(lf,"%s\n",Line);
    }
    ++pc;
@@ -2690,7 +2691,7 @@ char *EndSub(char *p)
 // ###
 
 char *ps_bit5(char *p)   { PrintPC(); return Parsebit5Data(p);}
-char *ps_bits(char *p)   { PrintPC(); return ParseBitData(p); }
+char *ps_bits(char *p)   {            return ParseBitData(p); }
 char *ps_bss(char *p)    { PrintPC(); return ParseBSSData(p); }
 char *ps_byte(char *p)   { PrintPC(); return ParseByteData(p); }
 char *ps_case(char *p)   { PrintPC(); return ParseCaseData(p); }
@@ -4303,7 +4304,7 @@ void NextMacLine(char *w)
 void ParseLine(char *cp)
 {
    int i,l,v,m;
-   char *start = cp;  // Remember start of line
+   char *start;
 
    am = -1;
    oc = -1;
@@ -4312,6 +4313,7 @@ void ParseLine(char *cp)
    Comment[0] = 0;
    cp = SkipHexCode(cp);        // Skip disassembly
    cp = SkipSpace(cp);          // Skip leading blanks
+   start = cp;                  // Remember start of line
    if (df) fprintf(df,"%5d %4.4x Parse[%d]:%s\n",LiNo,pc&0xffff,Phase,cp);
    if (CheckCondition(cp)) return;
    if (Skipping)
@@ -4399,6 +4401,7 @@ void ParseLine(char *cp)
          if (m < 0) // not a macro
          {
             if (df) fprintf(df,"LABEL:%s:\n",cp);
+            if (df) fprintf(df,"start:%s:\n",start);
             if (cp == start) cp = DefineLabel(cp,&v,0);
             else
             {
