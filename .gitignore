@@ -1,6 +1,8 @@
 # Ignore executables
 bs9
 bs9.exe
+form9
+form9.exe
 
 # Ignore Debug output
 Debug.lst
