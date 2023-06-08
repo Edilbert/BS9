@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 01-Jun-2023
+Version: 08-Jun-2023
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -1275,6 +1275,12 @@ char *SetBSS(char *p)
       exit(1);
    }
    p = EvalOperand(p+1,&bss,0);
+   if (*p)
+   {
+      ErrorLine(p);
+      ErrorMsg("Extra text after BSS operand\n");
+      exit(1);
+   }
    if (df) fprintf(df,"BSS = %4.4x\n",bss);
    if (ListOn && Phase == 2)
    {
@@ -1400,6 +1406,7 @@ struct LabelDefStruct
 char *DefineLabel(char *p, int *val, int Locked)
 {
    int i,j,l,v;
+   char *rop;
 
    *val = UNDEF; // preset
 
@@ -1446,7 +1453,13 @@ char *DefineLabel(char *p, int *val, int Locked)
       if (OpText[0])
       {
          p += strlen(p);
-         EvalOperand(OpText,&v,0);
+         rop = EvalOperand(OpText,&v,0);
+         if (*rop)
+         {
+            ErrorLine(rop);
+            ErrorMsg("Extra text after label assignment\n");
+            exit(1);
+         }
          if (lab[j].Address == UNDEF || LabDef[i].Type == 0)
              lab[j].Address = v;
          else if (lab[j].Address != v && !lab[j].Locked)
@@ -1485,6 +1498,12 @@ char *DefineLabel(char *p, int *val, int Locked)
    else if (!strcmpword(p,"BSS"))
    {
       p = EvalOperand(p+4,&v,0);
+      if (*p)
+      {
+         ErrorLine(p);
+         ErrorMsg("Extra text after BSS operand\n");
+         exit(1);
+      }
       j = LabelIndex(Label);
       if (j < 0)
       {
@@ -2018,6 +2037,7 @@ char *EvalOperand(char *p, int *v, int prio)
    *v = r;
    if (CodeStyle == 1 && *p == ' ') p += strlen(p);
    if (df) fprintf(df,"Result: %4x %d\n",r,r);
+   if (df) fprintf(df,"Rest  : %s\n",p);
    return p;
 }
 
@@ -2377,6 +2397,12 @@ char *ParseBSSData(char *p)
    int m;
 
    p = EvalOperand(p,&m,0);
+   if (*p)
+   {
+      ErrorLine(p);
+      ErrorMsg("Extra text after BSS operand\n");
+      exit(1);
+   }
    if (m < 1 || m > 32767)
    {
       ErrorMsg("Illegal BSS size %d\n",m);
@@ -2716,8 +2742,15 @@ char *ps_word(char *p)   { PrintPC(); return ParseWordData(p); }
 char *ps_align(char *p)
 {
    int a;
+   char *rop;
    ExtractOpText(p);
-   EvalOperand(OpText,&a,0);
+   rop = EvalOperand(OpText,&a,0);
+   if (*rop)
+   {
+      ErrorLine(rop);
+      ErrorMsg("Extra text after ALIGN operand\n");
+      exit(1);
+   }
    if (a > 0 && a <= 0x1000)
    {
       pc += (a - pc % a) % a;
@@ -2732,8 +2765,15 @@ char *ps_align(char *p)
 
 char *ps_org(char *p)
 {
+   char *rop;
    ExtractOpText(p);
-   EvalOperand(OpText,&pc,0);
+   rop = EvalOperand(OpText,&pc,0);
+   if (*rop)
+   {
+      ErrorLine(rop);
+      ErrorMsg("Extra text after ORG operand\n");
+      exit(1);
+   }
    PrintPCLine();
    return p;
 }
@@ -2755,9 +2795,16 @@ char *SetPC(char *p)
 char *ps_rmb(char *p)
 {
    int size;
+   char *rop;
 
    ExtractOpText(p);
-   EvalOperand(OpText,&size,0);
+   rop = EvalOperand(OpText,&size,0);
+   if (*rop)
+   {
+      ErrorLine(rop);
+      ErrorMsg("Extra text after RMB operand\n");
+      exit(1);
+   }
    if (size < 0)
    {
       ErrorMsg("Only theoretical physicists are allowed to reserve "
@@ -2782,8 +2829,15 @@ char *ps_sect(char *p)
 
 char *ps_setdp(char *p)
 {
+   char *rop;
    ExtractOpText(p);
-   EvalOperand(OpText,&DP,0);
+   rop = EvalOperand(OpText,&DP,0);
+   if (*rop)
+   {
+      ErrorLine(rop);
+      ErrorMsg("Extra text after SETDP operand\n");
+      exit(1);
+   }
    if (DP > 255) DP >>= 8;      // alternate DP assignment
    PrintByteLine(DP);
    return p;
@@ -3366,6 +3420,7 @@ char *GenerateCode(char *p)
    int i,l,v,rd;
    int r1,r2,qc,XIM;
    char *q;
+   char *rop;   // rest of operand
    char p1,p2;  // post increment
 
    // initialize
@@ -3523,7 +3578,16 @@ char *GenerateCode(char *p)
          for (i=0 ; i < l ; ++i)
          if (OpText[i] != '-') break;
          if (i == l) v = minlab[l];
-         else EvalOperand(OpText,&v,0);
+         else
+         {
+            rop = EvalOperand(OpText,&v,0);
+            if (*rop)
+            {
+               ErrorLine(rop);
+               ErrorMsg("Extra text after branch operand\n");
+               exit(1);
+            }
+         }
       }
       else if (OpText[0] == '+') // local forward label
       {
@@ -3638,7 +3702,13 @@ char *GenerateCode(char *p)
          ErrorMsg("Illegal immediate instruction %s %s\n",Mat[MneIndex].Mne,OpText);
          exit(1);
       }
-      EvalOperand(OpText+1,&v,0);
+      rop = EvalOperand(OpText+1,&v,0);
+      if (*rop)
+      {
+         ErrorLine(rop);
+         ErrorMsg("Extra text after operand\n");
+         exit(1);
+      }
       ol = 1 + (oc > 255);
       ql = RegisterSize(MneIndex);
       if (ql == 4 && oc != 0xcd) ql = 2; // only LDQ has 32 bit value
@@ -4844,7 +4914,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 01-Jun-2023         *\n");
+      printf("* Bit Shift Assembler 08-Jun-2023         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
