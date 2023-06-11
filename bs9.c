@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 08-Jun-2023
+Version: 11-Jun-2023
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -352,6 +352,9 @@ FILE *of; // object       file
 void AddLabel(char *p);
 void ErrorLine(char *p);
 void ErrorMsg(const char *format, ...);
+char *ExtractOpText(char *);
+char *EvalOperand(char *, int *, int);
+char *ExtractValue(char *, int *);
 
 // store code or data into ROM array
 
@@ -1066,14 +1069,14 @@ void ErrorLine(char *p)
    int i,ep;
    printf("%s\n",Line);
    ep = p - Line;
-   if (ep < 80)
+   if (ep >= 0 && ep < 80)
    {
       for (i=0 ; i < ep ; ++i) printf(" ");
       printf("^\n");
       return;
    }
    ep = p - OpText;
-   if (ep < 80 && *OpText)
+   if (ep >= 0 && ep < 80 && *OpText)
    {
       printf("Operand: %s\n",OpText);
       for (i=0 ; i < ep+9 ; ++i) printf(" ");
@@ -1233,7 +1236,6 @@ char *NeedChar(char *p, char c)
 }
 
 
-char *EvalOperand(char *, int *, int);
 
 char *ParseCaseData(char *p)
 {
@@ -1274,14 +1276,7 @@ char *SetBSS(char *p)
       ErrorMsg("Missing '=' in set BSS & instruction\n");
       exit(1);
    }
-   p = EvalOperand(p+1,&bss,0);
-   if (*p)
-   {
-      ErrorLine(p);
-      ErrorMsg("Extra text after BSS operand\n");
-      exit(1);
-   }
-   if (df) fprintf(df,"BSS = %4.4x\n",bss);
+   p = ExtractValue(p+1,&bss);
    if (ListOn && Phase == 2)
    {
       PrintLiNo();
@@ -1339,7 +1334,11 @@ int MacroIndex(char *p)
 }
 
 
-void ExtractOpText(char *p)
+// *************
+// ExtractOpText
+// *************
+
+char *ExtractOpText(char *p)
 {
    int l,inquo,inapo;
 
@@ -1347,18 +1346,14 @@ void ExtractOpText(char *p)
    inquo      = 0; // inside quotes
    inapo      = 0; // inside apostrophes
    ForcedMode = 0; // forced direct page (-1) or extended (+1)
+   OpText[0]  = 0; // empty operand text
 
-   OpText[0] = 0;     // empty operand
    p = SkipSpace(p);  // text after mnemonic or pseudo op
-   if (!*p) return;   // end of line
-   if (*p == '<')
+   if (!*p) return p; // end of line
+
+   if (*p == '<' || *p == '>')
    {
-      ForcedMode = -1;
-      ++p;
-   }
-   else if (*p == '>')
-   {
-      ForcedMode =  1;
+      ForcedMode = *p - 0x3d; // -1 for '<', +1 for '>'
       ++p;
    }
 
@@ -1380,8 +1375,8 @@ void ExtractOpText(char *p)
       while (l && isspace(OpText[l-1])) OpText[--l] = 0;
    }
    OpText[l] = 0; // end marker
-
-   // Extract Comment
+   if (df) fprintf(df,"OpText = [%s]\n",OpText);
+   return p;      // points to comment start or EOL
 }
 
 #define LABTYPES 4
@@ -1449,7 +1444,6 @@ char *DefineLabel(char *p, int *val, int Locked)
       lab[j].Att[0] = LDEF;
 
       ExtractOpText(p);
-      if (df) fprintf(df,"OpText = [%s]\n",OpText);
       if (OpText[0])
       {
          p += strlen(p);
@@ -1497,13 +1491,7 @@ char *DefineLabel(char *p, int *val, int Locked)
    }
    else if (!strcmpword(p,"BSS"))
    {
-      p = EvalOperand(p+4,&v,0);
-      if (*p)
-      {
-         ErrorLine(p);
-         ErrorMsg("Extra text after BSS operand\n");
-         exit(1);
-      }
+      p = ExtractValue(p+4,&v);
       j = LabelIndex(Label);
       if (j < 0)
       {
@@ -2041,6 +2029,31 @@ char *EvalOperand(char *p, int *v, int prio)
    return p;
 }
 
+// ************
+// ExtractValue
+// ************
+
+char *ExtractValue(char *p, int *v)
+{
+   char *r; // pointer to trailing text after value (should be none)
+
+   p = ExtractOpText(p);        // separate value string from comment
+   if (OpText[0] == 0)
+   {
+      ErrorLine(p);
+      ErrorMsg("Empty operand\n");
+      exit(1);
+   }
+   r = EvalOperand(OpText,v,0); // evaluate integer value
+   if (*r)                      // check for trailing text
+   {
+      ErrorLine(r);
+      ErrorMsg("Extra text after operand\n");
+      exit(1);
+   }
+   return p;                    // points to comment or EOL
+}
+
 // *************
 // ParseWordData
 // *************
@@ -2396,13 +2409,7 @@ char *ParseBSSData(char *p)
 {
    int m;
 
-   p = EvalOperand(p,&m,0);
-   if (*p)
-   {
-      ErrorLine(p);
-      ErrorMsg("Extra text after BSS operand\n");
-      exit(1);
-   }
+   p = ExtractValue(p,&m);
    if (m < 1 || m > 32767)
    {
       ErrorMsg("Illegal BSS size %d\n",m);
@@ -2742,15 +2749,7 @@ char *ps_word(char *p)   { PrintPC(); return ParseWordData(p); }
 char *ps_align(char *p)
 {
    int a;
-   char *rop;
-   ExtractOpText(p);
-   rop = EvalOperand(OpText,&a,0);
-   if (*rop)
-   {
-      ErrorLine(rop);
-      ErrorMsg("Extra text after ALIGN operand\n");
-      exit(1);
-   }
+   p = ExtractValue(p,&a);
    if (a > 0 && a <= 0x1000)
    {
       pc += (a - pc % a) % a;
@@ -2765,15 +2764,7 @@ char *ps_align(char *p)
 
 char *ps_org(char *p)
 {
-   char *rop;
-   ExtractOpText(p);
-   rop = EvalOperand(OpText,&pc,0);
-   if (*rop)
-   {
-      ErrorLine(rop);
-      ErrorMsg("Extra text after ORG operand\n");
-      exit(1);
-   }
+   p = ExtractValue(p,&pc);
    PrintPCLine();
    return p;
 }
@@ -2795,16 +2786,7 @@ char *SetPC(char *p)
 char *ps_rmb(char *p)
 {
    int size;
-   char *rop;
-
-   ExtractOpText(p);
-   rop = EvalOperand(OpText,&size,0);
-   if (*rop)
-   {
-      ErrorLine(rop);
-      ErrorMsg("Extra text after RMB operand\n");
-      exit(1);
-   }
+   p = ExtractValue(p,&size);
    if (size < 0)
    {
       ErrorMsg("Only theoretical physicists are allowed to reserve "
@@ -2829,15 +2811,7 @@ char *ps_sect(char *p)
 
 char *ps_setdp(char *p)
 {
-   char *rop;
-   ExtractOpText(p);
-   rop = EvalOperand(OpText,&DP,0);
-   if (*rop)
-   {
-      ErrorLine(rop);
-      ErrorMsg("Extra text after SETDP operand\n");
-      exit(1);
-   }
+   p = ExtractValue(p,&DP);
    if (DP > 255) DP >>= 8;      // alternate DP assignment
    PrintByteLine(DP);
    return p;
@@ -3711,7 +3685,7 @@ char *GenerateCode(char *p)
       }
       ol = 1 + (oc > 255);
       ql = RegisterSize(MneIndex);
-      if (ql == 4 && oc != 0xcd) ql = 2; // only LDQ has 32 bit value
+      if (ql == 4 && oc != 0xcd) ql = 2; // only LDQ immediate has 32 bit value
       il = ol + ql;
       if (Phase == 2 && v == UNDEF)
       {
@@ -3906,7 +3880,7 @@ char *GenerateCode(char *p)
             if (ol == 2) oc = (oc << 8) | ROM[pc+1];
             il = ADL[pc];
             ql = il - ol;
-            if (ForcedMode < 0) v &= 0xff;
+            if (ForcedMode < 0 || ql == 1) v &= 0xff;
          }
       }
       else
@@ -4032,12 +4006,26 @@ char *GenerateCode(char *p)
 
       if (ql == 2) // 16 bit value
       {
+         if (v > 0xffff || v < -32768)
+         {
+            ErrorLine(p);
+            ErrorMsg("16 bit address/value out of range\n");
+            exit(1);
+         }
          Put(pc+ibi++,v >> 8,p);
          Put(pc+ibi++,v     ,p);
       }
 
       if (ql == 1) //  8 bit value
       {
+         if (v >= 0xff00 && v <= 0xffff) v &= 0xff;
+         if (v > 255 || v < -128)
+         {
+            printf("v = %x\n",v);
+            ErrorLine(p);
+            ErrorMsg("8 bit address/value out of range\n");
+            exit(1);
+         }
          Put(pc+ibi++,v,p);
       }
 
@@ -4914,7 +4902,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 08-Jun-2023         *\n");
+      printf("* Bit Shift Assembler 11-Jun-2023         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
