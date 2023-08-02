@@ -315,11 +315,12 @@ int IsEquate(void)
    if (e)
    {
       p = strchr(Line,';');
-      if (p && p < e) return -1;
+      if (p && p < e) return -1; // '=' after comment character
       p = strchr(Line,'*');
-      if (p && p < e) return -1;
+      if (p && p < e) return -1; // ignore * = syntax for PC setting
+      return e-Line;
    }
-   return e-Line;
+   return -1; // no equate character found
 }
 
 
@@ -418,7 +419,7 @@ int MoveLine(int i, int col)
       }
       while (col < i)
       {
-         if (Line[i-1] != ' ') break;
+         if (i > 0 && Line[i-1] != ' ') break;
          if (i > 1 && Line[i-2] != ' ') break;
          --i;
          memmove(Line+i,Line+i+1,l);
