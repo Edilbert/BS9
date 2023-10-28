@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 11-Jun-2023
+Version: 28-Oct-2023
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -2528,6 +2528,8 @@ char *ParseASCII(char *p, unsigned char b[], int *l)
          else if (*p == 't') b[*l] =  9; // tab
          else if (*p == 'a') b[*l] =  7; // alert
          else if (*p == '0') b[*l] =  0; // zero
+         else if (*p == 'b') b[*l] = 29; // bold colour
+         else if (*p == 's') b[*l] = 28; // standard colour
          else b[*l] = *p;
          ++(*l);
          ++p;
@@ -4902,7 +4904,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 11-Jun-2023         *\n");
+      printf("* Bit Shift Assembler 28-Oct-2023         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
