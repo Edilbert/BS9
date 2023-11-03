@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 28-Oct-2023
+Version: 03-Nov-2023
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -4021,9 +4021,10 @@ char *GenerateCode(char *p)
       if (ql == 1) //  8 bit value
       {
          if (v >= 0xff00 && v <= 0xffff) v &= 0xff;
+         if ((v-(DP<<8)) < 256 && (v-(DP<<8)) >= -128) v -= DP<<8;
          if (v > 255 || v < -128)
          {
-            printf("v = %x\n",v);
+            printf("v = %x  DP = %x\n",v,DP);
             ErrorLine(p);
             ErrorMsg("8 bit address/value out of range\n");
             exit(1);
@@ -4904,7 +4905,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 28-Oct-2023         *\n");
+      printf("* Bit Shift Assembler 03-Nov-2023         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
