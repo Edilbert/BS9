@@ -27,7 +27,7 @@ install:
 clean:
 	rm -f $(EXE) $(EXE2)
 
-dist: $(EXE)
+dist: $(EXE) $(EXE2)
 	zip bs9.zip $(EXE) $(EXE2) README.md
 
 .PHONY: all install clean
