@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 03-Nov-2023
+Version: 19-Nov-2023
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -1844,8 +1844,8 @@ char *op_min(char *p, int *v) { p = EvalOperand(p+1,v,12);*v = -(*v)    ; return
 char *op_lno(char *p, int *v) { p = EvalOperand(p+1,v,12);*v = !(*v)    ; return p; }
 char *op_bno(char *p, int *v) { p = EvalOperand(p+1,v,12);*v = ~(*v)    ; return p; }
 
-char *op_low(char *p, int *v) { p = EvalOperand(p+1,v,12);*v &= 0xff    ; return p; }
-char *op_hig(char *p, int *v) { p = EvalOperand(p+1,v,12);*v >>= 8;     ; return p; }
+char *op_low(char *p, int *v) { p = EvalOperand(p+1,v,12);ForcedMode=-1 ; return p; }
+char *op_hig(char *p, int *v) { p = EvalOperand(p+1,v,12);ForcedMode= 1 ; return p; }
 
 char *op_prc(char *p, int *v) { *v = pc; return p+1;}
 char *op_hex(char *p, int *v) { return EvalHexValue(p+1,v) ;}
@@ -4905,7 +4905,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 03-Nov-2023         *\n");
+      printf("* Bit Shift Assembler 19-Nov-2023         *\n");
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
