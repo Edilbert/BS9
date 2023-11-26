@@ -316,6 +316,7 @@ For example:
 #include <math.h>
 #include <ctype.h>
 #include <errno.h>
+#include <time.h>
 
 int CPU = 6309; // default: Hitachi 6309
 
@@ -848,6 +849,7 @@ char OpText[ML];             // operand source
 char Comment[ML];            // comment source
 char Hint[ML];               // optimization hints
 char Scope[ML];              // for local symbols
+char datebuffer [80];
 
 // state of label definition
 // defined or BSS or defined by position
@@ -2565,7 +2567,13 @@ char *ParseByteData(char *p)
       if (CodeStyle == 1 && *p == ' ') break;
       else p = SkipSpace(p);
       Delimiter = *p;
-      if (Delimiter == '"' || Delimiter == '\'')
+      if (!strncmp(p,"$DATE",5))
+      {
+         strcpy((char *)ByteBuffer+l,datebuffer);
+         l += strlen(datebuffer);
+         p += 5;
+      }
+      else if (Delimiter == '"' || Delimiter == '\'')
       {
          i = l; // remember start of string
          p = ParseASCII(p,ByteBuffer,&l);
@@ -4823,6 +4831,12 @@ int main(int argc, char *argv[])
    int ic,l,v;
    char *EndPtr;
    char *argsrc = NULL; // argument filename;
+   time_t rawtime;
+   struct tm * timeinfo;
+
+   time (&rawtime);
+   timeinfo = localtime (&rawtime);
+   strftime (datebuffer,80,"%e-%b-%Y",timeinfo);
 
    for (ic=1 ; ic < argc ; ++ic)
    {
@@ -4905,7 +4919,8 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 19-Nov-2023         *\n");
+      printf("* Bit Shift Assembler 26-Nov-2023         *\n");
+      printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
