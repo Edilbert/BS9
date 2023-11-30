@@ -1506,12 +1506,12 @@ char *DefineLabel(char *p, int *val, int Locked)
       }
       lab[j].Ref[0] = LiNo;
       lab[j].Att[0] = LBSS;
-      if (lab[j].Address == UNDEF) lab[j].Address = bss;
+      if (lab[j].Address >= UNDEF) lab[j].Address = bss;
       else if (lab[j].Address != bss)
       {
          ++ErrNum;
          ErrorLine(p);
-         ErrorMsg("Multiple assignments for label [%s]\n"
+         ErrorMsg("Multiple assignments for BSS label [%s]\n"
                   "1st. value = $%4.4x   2nd. value = $%4.4x\n",
                   Label,lab[j].Address,bss);
          exit(1);
