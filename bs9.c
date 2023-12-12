@@ -2529,6 +2529,7 @@ char *ParseASCII(char *p, unsigned char b[], int *l)
          else if (*p == 'n') b[*l] = 10; // new line
          else if (*p == 't') b[*l] =  9; // tab
          else if (*p == 'a') b[*l] =  7; // alert
+         else if (*p == 'e') b[*l] = 27; // escape
          else if (*p == '0') b[*l] =  0; // zero
          else if (*p == 'b') b[*l] = 29; // bold colour
          else if (*p == 's') b[*l] = 28; // standard colour
