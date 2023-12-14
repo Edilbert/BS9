@@ -2750,7 +2750,7 @@ char *ps_include(char *p){ PrintPC(); return IncludeFile(p); }
 char *ps_list(char *p)   { PrintPC(); return ParseListOption(p); }
 char *ps_load(char *p)   { PrintPC(); return ParseLoadData(p); }
 char *ps_long(char *p)   { PrintPC(); return ParseLongData(p); }
-char *ps_real(char *p)   { PrintPC(); return ParseRealData(p); }
+char *ps_real(char *p)   {            return ParseRealData(p); }
 char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
 char *ps_store(char *p)  {            return ParseStoreData(p); }
 char *ps_string(char *p) { PrintPC(); return ParseByteData(p); }
