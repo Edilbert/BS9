@@ -823,7 +823,7 @@ int SFT[SFMAX];      // file format
 
 int StoreCount = 0;  // number of segments to store
 
-enum OutfileFormat { BINARY, SRECORD };
+enum OutfileFormat { BINARY, SRECORD, SPARROW };
 
 signed char ADL[0x10000];
 
@@ -2261,7 +2261,7 @@ char *ParseStoreData(char *p)
 
    if (Phase < 2) return p + strlen(p);
    p = EvalOperand(p,&Start,0);
-   if (Start < 0 || Start > 0xffff)
+   if (Start < 0 || Start > 0xfffff)
    {
       ErrorMsg("Illegal start address for STORE %d\n",Start);
       exit(1);
@@ -2295,18 +2295,20 @@ char *ParseStoreData(char *p)
    Filename = (char *)StrNDup(p, EndPtr - p);
    FileFormat = BINARY;
    Entry = -1;
-   p = NeedChar(EndPtr,',');
+   p = NeedChar(EndPtr+1,',');
    if (p)
    {
       ++p;
            if (StrMatch(p, "BIN"))  FileFormat = BINARY;
       else if (StrMatch(p, "SREC")) FileFormat = SRECORD;
       else if (StrMatch(p, "S19"))  FileFormat = SRECORD;
+      else if (StrMatch(p, "SPARROW"))  FileFormat = SPARROW;
       else
       {
          ErrorMsg("Unknown output file format\n");
          exit(1);
       }
+      if (df) fprintf(df,"Filefornat = %d\n",FileFormat);
       p = NeedChar(p,',');
       if (p)
       {
@@ -2324,8 +2326,14 @@ char *ParseStoreData(char *p)
    SFE[StoreCount] = Entry;
    SFF[StoreCount] = Filename;
    SFT[StoreCount] = FileFormat;
-   if (df) fprintf(df,"Storing %4.4x - %4.4x <%s>, %s format\n",
-           Start,Start+Length-1,Filename,FileFormat ? "S19" : "binary");
+   if (df)
+   {
+      fprintf(df,"Storing %4.4x - %4.4x <%s>,",
+           Start,Start+Length-1,Filename);
+           if (FileFormat == SPARROW) fprintf(df,"SPARROW\n");
+      else if (FileFormat == SRECORD) fprintf(df,"SRECORD\n");
+      else                            fprintf(df,"BINARY\n");
+   }
    if (StoreCount < SFMAX) ++StoreCount;
    else
    {
@@ -2336,6 +2344,7 @@ char *ParseStoreData(char *p)
    p += strlen(p);
    return p;
 }
+
 
 
 char *ParseLoadData(char *p)
@@ -4721,6 +4730,43 @@ void WriteBinaryFormat(int i)
     if (fclose(bf)) AssertFileOp(NULL, msg);
 }
 
+int Checksum(int start, int n)
+{
+   int sum = 0;
+   int i;
+   for (i=start ; i < start+n-1 ; i+=2)
+      sum += (ROM[i] << 8) | ROM[i+1];
+   return sum & 0xffff;
+}
+
+void WriteSparrowFormat(int i)
+{
+    int Start,Length,Check;
+    unsigned char Head[8];
+    FILE *bf;
+    const char *msg = "Write Sparrow binary";
+
+    Start  = SFA[i];
+    Length = SFL[i];
+    Check  = Checksum(Start,Length);
+
+    if (df) fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
+                    Start,Start+Length-1,SFF[i]);
+    Head[0] = 'S';
+    Head[1] =  Start  >> 16;
+    Head[2] = (Start  >>  8) & 0xff;
+    Head[3] = (Start       ) & 0xff;
+    Head[4] = Length  >>  8;
+    Head[5] = Length  & 0xff;
+    Head[6] = Check   >>  8;
+    Head[7] = Check   & 0xff;
+
+    bf = AssertFileOp(fopen(SFF[i],"wb"), msg);
+    if (fwrite(Head,1,8,bf) < 8) AssertFileOp(NULL, msg);
+    if (fwrite(ROM+Start,1,Length,bf) < (size_t)Length) AssertFileOp(NULL, msg);
+    if (fclose(bf)) AssertFileOp(NULL, msg);
+}
+
 void WriteS19Line(FILE *bf, const char *RecordType, int PayloadSize, int Address, unsigned char *Data)
 {
    int i,Checksum;
@@ -4795,8 +4841,9 @@ void WriteBinaries(void)
 
    for (i=0 ; i < StoreCount ; ++i)
    {
-      if (SFT[i] == SRECORD) WriteS19Format(i);
-      else                   WriteBinaryFormat(i);
+           if (SFT[i] == SRECORD) WriteS19Format(i);
+      else if (SFT[i] == SPARROW) WriteSparrowFormat(i);
+      else                        WriteBinaryFormat(i);
    }
 }
 
