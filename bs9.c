@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 19-Nov-2023
+Version: 17-Jan-2024
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -358,6 +358,10 @@ char *EvalOperand(char *, int *, int);
 char *ExtractValue(char *, int *);
 
 // store code or data into ROM array
+
+// ***
+// Put
+// ***
 
 void Put(int i, int v, char *p)
 {
@@ -895,6 +899,10 @@ int Macros;           // total number of macros
 
 char Cstat[26];
 
+// *******
+// MneStat
+// *******
+
 void MneStat(void)
 {
    unsigned int i,j;
@@ -916,6 +924,10 @@ char *SkipSpace(char *p)
    if (*p) while (isspace(*p)) ++p;
    return p;
 }
+
+// ********
+// StrMatch
+// ********
 
 char *StrMatch(char *s, const char *m)
 {
@@ -996,6 +1008,9 @@ char *GetMacroArg(char *p, char *s)
    return p;
 }
 
+// **********
+// NextSymbol
+// **********
 
 char *NextSymbol(char *p, char *s)
 {
@@ -1005,6 +1020,10 @@ char *NextSymbol(char *p, char *s)
 }
 
 // Compare two strings ignoring case
+
+// **********
+// StrCaseCmp
+// **********
 
 int StrCaseCmp(const char *a, const char *b)
 {
@@ -3203,6 +3222,10 @@ int PostIndexW(int reg,char *p)
    return PostIndex(reg,p);
 }
 
+// ***********
+// SetPostByte
+// ***********
+
 int SetPostByte(char *p, int *v)
 {
    int inc,dec,reg,amo,off,ind,opl;
@@ -3322,6 +3345,7 @@ int SetPostByte(char *p, int *v)
       reg = PostIndexW(reg,p);
       if (df) fprintf(df,"zero offset reg=%2.2x\n",reg);
       while (*(++p) == '+') ++inc;
+      if (df) fprintf(df, "Pre - (%d) and Post + (%d)\n",dec,inc);
       if (reg <  0) OperandError(p);
            if (inc == 1 && dec == 0) amo = 0x00;
       else if (inc == 2 && dec == 0) amo = 0x01;
@@ -3340,6 +3364,7 @@ int SetPostByte(char *p, int *v)
          if (df) fprintf(df,"W pb = %2.2x ind = %2.2x\n",reg,ind);
          return reg;
       }
+      if (*p) OperandError(p);
       return (0x80 | reg | ind | amo);
    }
 
@@ -4967,7 +4992,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 26-Nov-2023         *\n");
+      printf("* Bit Shift Assembler 17-Jan-2024         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
