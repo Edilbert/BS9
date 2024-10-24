@@ -1868,7 +1868,8 @@ char *op_bno(char *p, int *v) { p = EvalOperand(p+1,v,12);*v = ~(*v)    ; return
 char *op_low(char *p, int *v) { p = EvalOperand(p+1,v,12);ForcedMode=-1 ; return p; }
 char *op_hig(char *p, int *v) { p = EvalOperand(p+1,v,12);ForcedMode= 1 ; return p; }
 
-char *op_prc(char *p, int *v) { *v = pc; return p+1;}
+char *op_prc(char *p, int *v) { *v = pc ; return p+1;}
+char *op_dac(char *p, int *v) { *v = bss; return p+1;}
 char *op_hex(char *p, int *v) { return EvalHexValue(p+1,v) ;}
 char *op_cha(char *p, int *v) { return EvalCharValue(p+1,v);}
 char *op_muc(char *p, int *v) { return EvalMultiCharValue(p+1,v);}
@@ -1895,6 +1896,7 @@ struct unaop_struct unaop[] =
    {'!',&op_lno}, // logical NOT
    {'~',&op_bno}, // bitwise NOT
    {'*',&op_prc}, // program counter
+   {'&',&op_dac}, // data counter
    {'$',&op_hex}, // hex constant
    { 39,&op_cha}, // char constant
    { 34,&op_muc}, // multi char constant
@@ -1979,7 +1981,7 @@ char *EvalOperand(char *p, int *v, int prio)
    // Start parsing unary operators
    // PC represents the current program counter
 
-   if (*p && strchr("[(+-!~<>*$'\"%?",*p))
+   if (*p && strchr("[(+-!~<>*&$'\"%?",*p))
    {
       for (i=0 ; i < UNAOPS ; ++i)
       if (*p == unaop[i].op)
