@@ -2077,6 +2077,33 @@ char *ExtractValue(char *p, int *v)
    return p;                    // points to comment or EOL
 }
 
+// *********
+// AlignFill
+// *********
+
+char *AlignFill(char *p, int *v, int *f)
+{
+   char *r; // pointer to text after value
+
+   p = ExtractOpText(p);        // separate value string from comment
+   if (OpText[0] == 0)
+   {
+      ErrorLine(p);
+      ErrorMsg("Empty operand\n");
+      exit(1);
+   }
+   r = EvalOperand(OpText,v,0); // evaluate integer value
+   if (*r == 0) return p;       // no fill value specified
+   if (*r != '(')               // check for fill value
+   {
+      ErrorLine(r);
+      ErrorMsg("Illegal syntax for fill value\n");
+      exit(1);
+   }
+   r = EvalOperand(r+1,f,0);    // evaluate fill value
+   return p;                    // points to comment or EOL
+}
+
 // *************
 // ParseWordData
 // *************
@@ -2789,11 +2816,32 @@ char *ps_word(char *p)   { PrintPC(); return ParseWordData(p); }
 
 char *ps_align(char *p)
 {
-   int a;
-   p = ExtractValue(p,&a);
-   if (a > 0 && a <= 0x1000)
+   int a,dal,fill;
+
+   dal  = 0;                  // data align = false
+   p = SkipSpace(p);
+   if (*p == '*') ++p;        // PC align
+   if (*p == '&')
    {
-      pc += (a - pc % a) % a;
+      dal = 1;                // data align
+      ++p;
+   }
+   if (dal) fill = Preset;
+   else     fill = 0x12  ;    // NOP
+
+   p = AlignFill(p,&a,&fill);
+
+   if (dal)
+   {
+      a = (a - bss % a) % a;
+      if (df) fprintf(df,"Data align %4.4x - %4.4x fill %2.2x\n",bss,bss+a,fill);
+      while (a--) ROM[bss++] = fill;
+   }
+   else
+   {
+      a = (a - pc  % a) % a;
+      if (df) fprintf(df,"Code align %4.4x - %4.4x fill %2.2x\n",pc,pc+a,fill);
+      while (a--) ROM[pc++]  = fill;
    }
    PrintPCLine();
    return p;
