@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 17-Jan-2024
+Version: 31-Oct-2024
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -155,6 +155,9 @@ SETDP $20                      assume content of direct page register
 FCB   $20,"Example",0          stores a series of byte data
 FDB   LAB_10, WriteTape,$0200  stores a series of word data
 FCC   "Example\n"              store ASCII string
+ALIGN 16                       align PC (fill gaps with NOPs)
+ALIGN * 8 (0)                  align PC (fill gaps with 0)
+ALIGN & 256 (0)                align BSS (fill gaps with 0)
 
 Examples of Operands
 ====================
@@ -5042,7 +5045,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 17-Jan-2024         *\n");
+      printf("* Bit Shift Assembler 31-Oct-2024         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
