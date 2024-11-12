@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 31-Oct-2024
+Version: 12-Nov-2024
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -941,6 +941,7 @@ char *StrMatch(char *s, const char *m)
 
    for (j = 0 ; j <= k-l ; ++j)
    {
+      if (s[j] == ';') break;  // don't search comment
       for (i = 0 ; i < l ; ++i)
       {
          if (toupper(s[j+i]) != toupper(m[i])) break;
@@ -1212,12 +1213,20 @@ void PrintLine(void)
    fprintf(lf,"                  %s\n",Line);
 }
 
+// ***********
+// PrintPCLine
+// ***********
+
 void PrintPCLine(void)
 {
    if (!ListOn || Phase < 2) return;
    PrintPC();
    fprintf(lf,"              %s\n",Line);
 }
+
+// *************
+// PrintByteLine
+// *************
 
 void PrintByteLine(int b)
 {
@@ -1227,6 +1236,10 @@ void PrintByteLine(int b)
    fprintf(lf,"         %s\n",Line);
 }
 
+// *************
+// PrintWordLine
+// *************
+
 void PrintWordLine(int w)
 {
    if (!ListOn || Phase < 2) return;
@@ -1235,7 +1248,9 @@ void PrintWordLine(int w)
    fprintf(lf,"              %s\n",Line);
 }
 
-
+// *************
+// IsInstruction
+// *************
 
 int IsInstruction(char *p)
 {
@@ -1251,6 +1266,10 @@ int IsInstruction(char *p)
    }
    return -1; // No mnemonic
 }
+
+// ********
+// NeedChar
+// ********
 
 char *NeedChar(char *p, char c)
 {
@@ -1435,7 +1454,6 @@ char *DefineLabel(char *p, int *val, int Locked)
       ErrorMsg("Too many labels (> %d)\n",MAXLAB);
       exit(1);
    }
-// if (df) fprintf(df,"GetSymbol(%s)\n",p);
    p = GetSymbol(p,Label);
    if (*p == ':') ++p; // Ignore colon after label
    l = strlen(Label);
@@ -1890,8 +1908,8 @@ struct unaop_struct
 
 struct unaop_struct unaop[] =
 {
-   {'<',&op_low}, // low byte
-   {'>',&op_hig}, // extended
+   {'<',&op_low}, // forced direct mode
+   {'>',&op_hig}, // forced extended mode
    {'[',&op_par}, // bracket
    {'(',&op_par}, // parenthesis
    {'+',&op_plu}, // positive sign
@@ -4248,6 +4266,10 @@ void MacroInfo(int n)
    fprintf(df,"-----------------\n");
 }
 
+// ***********
+// RecordMacro
+// ***********
+
 void RecordMacro(char *p)
 {
    char Macro[ML];
@@ -5038,14 +5060,14 @@ int main(int argc, char *argv[])
    // add extensions
 
    memmove(Pre+l,".pp" ,3);
-   memmove(Lst+l,".lst",4);
+   memmove(Lst+l,".ls9",4);
    memmove(Opt+l,".opt",4);
 
    if (!Quiet)
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 31-Oct-2024         *\n");
+      printf("* Bit Shift Assembler 12-Nov-2024         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
