@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 12-Nov-2024
+Version: 11-Dec-2024
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -236,6 +236,9 @@ Generated Code:
 
 Macros accept up to 10 parameter and may have any length.
 
+MACLIST ON  : List expanded macro code lines
+MACLIST OFF : Do not list expanded macro code lines
+
 Conditional assembly
 ====================
 Example: Assemble first part if C64 has a non zero value
@@ -343,6 +346,7 @@ unsigned char LOCK[0x10100]; // binary
 // <0: data byte or not start byte of instruction
 
 int ErrNum;          // error count
+int ListGlobal = 1;  // global listing control
 int ListOn = 1;      // listing control
 
 FILE *sf; // source       file
@@ -770,6 +774,7 @@ int Quiet      =  0; // switch for quiet mode
 int ERRMAX     = 10; // stop assemby after ERRMAX errors
 int EnumValue  = -1; // last used ENUM value
 int MacLev;          // macro nesting level
+int MacList    =  1; // macro listing option
 int ModuleStart;     // address of a module
 int Optimize;        // branch and jump omtimization
 int FormLn;          // lines per page [inactive]
@@ -1046,6 +1051,10 @@ int StrCaseCmp(const char *a, const char *b)
 
 // Compare two strings ignoring case of max. length n
 
+// ***********
+// StrNCaseCmp
+// ***********
+
 int StrNCaseCmp(const char *a, const char *b, unsigned int n)
 {
    unsigned int i,l,m;
@@ -1063,6 +1072,10 @@ int StrNCaseCmp(const char *a, const char *b, unsigned int n)
 
 // Check if string s2 is a word in s1
 // and search string is followed by a white space or symbol
+
+// **********
+// strcmpword
+// **********
 
 int strcmpword(const char *s1, const char *s2)
 {
@@ -1298,14 +1311,15 @@ char *ParseCaseData(char *p)
 char *ParseListOption(char *p)
 {
    p = SkipSpace(p);
-        if (*p == '+') ListOn = 1;
-   else if (*p == '-') ListOn = 0;
+        if (*p == '+') ListGlobal = 1;
+   else if (*p == '-') ListGlobal = 0;
    else
    {
       ++ErrNum;
       ErrorMsg("Missing '+' or '-' after LIST\n");
       exit(1);
    }
+   ListOn = ListGlobal;
    PrintLine();
    return p+1;
 }
@@ -2531,6 +2545,28 @@ char *ParseCPUData(char *p)
 }
 
 
+char *ParseOnOff(char *p, int *v)
+{
+   p = SkipSpace(p);
+        if (*p == '1') *v = 1;
+   else if (*p == '0') *v = 0;
+   else if (!StrNCaseCmp(p,"ON" ,2)) *v = 1;
+   else if (!StrNCaseCmp(p,"OFF",3)) *v = 0;
+
+   else
+   {
+      ErrorMsg("Unknown option\n");
+      exit(1);
+   }
+   if (ListOn && Phase == 2)
+   {
+      PrintLiNo();
+      fprintf(lf,"                  %s\n",Line);
+   }
+   return p + strlen(p);
+}
+
+
 char *ParseBitData(char *p)
 {
    int i,v;
@@ -2828,6 +2864,7 @@ char *ps_include(char *p){ PrintPC(); return IncludeFile(p); }
 char *ps_list(char *p)   { PrintPC(); return ParseListOption(p); }
 char *ps_load(char *p)   { PrintPC(); return ParseLoadData(p); }
 char *ps_long(char *p)   { PrintPC(); return ParseLongData(p); }
+char *ps_maclist(char *p){            return ParseOnOff(p,&MacList); }
 char *ps_real(char *p)   {            return ParseRealData(p); }
 char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
 char *ps_store(char *p)  {            return ParseStoreData(p); }
@@ -2957,6 +2994,7 @@ struct PseudoStruct PseudoTab[] =
    {"LIST"      , &ps_list   },
    {"LOAD"      , &ps_load   },
    {"LONG"      , &ps_long   },
+   {"MACLIST"   , &ps_maclist},
    {"MODULE"    , &ps_subr   }, // alias to SUBROUTINE
    {"ORG"       , &ps_org    },
    {"RMB"       , &ps_rmb    },
@@ -3801,6 +3839,7 @@ char *GenerateCode(char *p)
       }
       ol = 1 + (oc > 255);
       ql = RegisterSize(MneIndex);
+      if (oc == 0x118d) ql = 1; // DIVD uses byte operand
       if (ql == 4 && oc != 0xcd) ql = 2; // only LDQ immediate has 32 bit value
       il = ol + ql;
       if (Phase == 2 && v == UNDEF)
@@ -4723,8 +4762,16 @@ void Phase2(void)
       if (l && Line[l-1] == 10) Line[--l] = 0; // Remove linefeed
       if (l && Line[l-1] == 13) Line[--l] = 0; // Remove return
       ParseLine(Line);
-      if (MacLev) NextMacLine(Line);
-      else fgets(Line,sizeof(Line),sf);
+      if (MacLev)
+      {
+         NextMacLine(Line);
+         ListOn = MacList;
+      }
+      else
+      {
+         fgets(Line,sizeof(Line),sf);
+         ListOn = ListGlobal;
+      }
       Eof = feof(sf) || ForcedEnd;
       if (Eof && IncludeLevel > 0) Eof = CloseInclude();
       if (GenEnd < pc) GenEnd = pc; // Remember highest assenble address
@@ -4969,7 +5016,7 @@ void usage(void)
    printf("   -n include line numbers in listing\n");
    printf("   -o optimize long branches and jumps\n");
    printf("   -p print preprocessed source\n");
-   printf("   -p quiet mode\n");
+   printf("   -q quiet mode\n");
    printf("   -x assemble listing file - skip hex in front\n");
    exit(1);
 }
@@ -5067,7 +5114,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 12-Nov-2024         *\n");
+      printf("* Bit Shift Assembler 11-Dec-2024         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
