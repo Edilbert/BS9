@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 11-Dec-2024
+Version: 06-Jan-2025
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -1818,7 +1818,18 @@ char *EvalDecValue(char *p, int *v)
 
 char *EvalCharValue(char *p, int *v)
 {
-   if (*p == '\\')
+   // a common error is to code '\' instead of '\\' for backslash.
+   // we fix it here quietly by assuming that '\\' was intended
+   // apostrophe would be coded as '\''
+
+   // printf("%s %d %c\n",p,strncmp(p,"'\\'",3),p[3]);
+   if (p[0]=='\\' && p[1]=='\'' && p[3]!='\'')
+   {
+      *v = '\\';
+      p+=2;
+   }
+
+   else if (*p == '\\')
    {
       ++p;
            if (*p == 'r') *v = 13;
@@ -1830,6 +1841,7 @@ char *EvalCharValue(char *p, int *v)
       if (*p) ++p;
    }
    else *v = *p++;
+
    if (*p != '\'' && *p != 0)
    {
       ++ErrNum;
@@ -5114,7 +5126,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 11-Dec-2024         *\n");
+      printf("* Bit Shift Assembler 06-Jan-2025         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
