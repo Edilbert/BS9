@@ -1707,7 +1707,12 @@ char *ParseRealData(char *p)
    }
    else
    {
-      d = strtod(p,NULL);
+      if (!StrNCaseCmp(p,"cosd(",5))
+      {
+         d = strtod(p+5,NULL);
+         d = cos(M_PI * d / 180.0);
+      }
+      else d = strtod(p,NULL);
       if (d != 0)
       {
          Sign = 0;
