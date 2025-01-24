@@ -344,10 +344,10 @@ int IsInstruction(int *l)
          c = Line[j-1];
          if (c != ' ') continue;
       }
-      for (i = 0 ; i < DIMOP ; ++i)
+      for (i = 0 ; i < (int) DIMOP ; ++i)
       {
          *l = strlen(Mat[i].Mne);
-         if (strlen(Line+j) >= *l)
+         if (strlen(Line+j) >= (size_t) *l)
          {
             if (!StrNCaseCmp(Line+j,Mat[i].Mne,*l)
             && Line[j+ *l] <= ' ') return j;
@@ -380,7 +380,7 @@ int IsPseudo(int *l)
       for (i = 0 ; i < PSEUDOS ; ++i)
       {
          *l = strlen(PseudoTab[i]);
-         if (strlen(Line+j) >= *l)
+         if (strlen(Line+j) >= (size_t) *l)
          {
             if (!StrNCaseCmp(Line+j,PseudoTab[i],*l)
             && Line[j+ *l] <= ' ') return j;
@@ -561,7 +561,7 @@ int main(int argc, char *argv[])
       else Usage();
    }
 
-   if (optl && optu || opto && optp)
+   if ((optl && optu) || (opto && optp))
    {
       fprintf(stderr,"*** option conflict ***\n");
       exit(1);
