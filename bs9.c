@@ -315,6 +315,11 @@ For example:
 
 #define _CRT_SECURE_NO_WARNINGS
 
+
+// Define M_PI
+
+#define _XOPEN_SOURCE 500
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -323,6 +328,7 @@ For example:
 #include <ctype.h>
 #include <errno.h>
 #include <time.h>
+#include <math.h>
 
 int CPU = 6309; // default: Hitachi 6309
 
