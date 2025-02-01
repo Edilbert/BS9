@@ -1691,7 +1691,7 @@ int Hex2Byte(char hex[])
    return -1;
 }
 
-char *ParseRealData(char *p)
+char *ParseRealData(char *p, int ldq)
 {
 
    int v;
@@ -1777,18 +1777,21 @@ char *ParseRealData(char *p)
       }
    }
 
-   if (Phase == 2)
+   if (!ldq)
    {
-      for (i=0 ; i < mansize+1 ; ++i) Put(pc+i,Operand[i],p);
-      if (ListOn)
+      if (Phase == 2)
       {
-         PrintPC();
-         fprintf(lf," %2.2x %2.2x%2.2x%2.2x  ",
-            Operand[0],Operand[1],Operand[2],Operand[3]);
-         fprintf(lf," %s\n",Line);
+         for (i=0 ; i < mansize+1 ; ++i) Put(pc+i,Operand[i],p);
+         if (ListOn)
+         {
+            PrintPC();
+            fprintf(lf," %2.2x %2.2x%2.2x%2.2x  ",
+               Operand[0],Operand[1],Operand[2],Operand[3]);
+            fprintf(lf," %s\n",Line);
+         }
       }
+      pc += mansize+1;
    }
-   pc += mansize+1;
    return p + strlen(p);;
 }
 
@@ -2899,7 +2902,7 @@ char *ps_list(char *p)   { PrintPC(); return ParseListOption(p); }
 char *ps_load(char *p)   { PrintPC(); return ParseLoadData(p); }
 char *ps_long(char *p)   { PrintPC(); return ParseLongData(p); }
 char *ps_maclist(char *p){            return ParseOnOff(p,&MacList); }
-char *ps_real(char *p)   {            return ParseRealData(p); }
+char *ps_real(char *p)   {            return ParseRealData(p,0); }
 char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
 char *ps_store(char *p)  {            return ParseStoreData(p); }
 char *ps_string(char *p) { PrintPC(); return ParseByteData(p); }
@@ -3806,12 +3809,23 @@ char *GenerateCode(char *p)
          ErrorMsg("Illegal immediate instruction %s %s\n",Mat[MneIndex].Mne,OpText);
          exit(1);
       }
-      rop = EvalOperand(OpText+1,&v,0);
-      if (*rop)
+      if (oc == 0xcd && strchr(OpText+1,'.')) // LDQ #real constant
       {
-         ErrorLine(rop);
-         ErrorMsg("Extra text after operand\n");
-         exit(1);
+         rop = ParseRealData(OpText+1,1);
+         v =  (Operand[0]  << 24) |
+         ((128|Operand[1]) << 16) |
+              (Operand[2]  <<  8) |
+               Operand[3];
+      }
+      else
+      {
+         rop = EvalOperand(OpText+1,&v,0);
+         if (*rop)
+         {
+            ErrorLine(rop);
+            ErrorMsg("Extra text after operand\n");
+            exit(1);
+         }
       }
       ol = 1 + (oc > 255);
       ql = RegisterSize(MneIndex);
