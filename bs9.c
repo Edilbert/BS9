@@ -2359,7 +2359,7 @@ char *IncludeFile(char *p)
    IncludeStack[IncludeLevel].LiNo = LiNo;
    IncludeStack[++IncludeLevel].fp = sf;
    IncludeStack[IncludeLevel].Src = (char *)StrNDup(FileName,strlen(FileName));
-   if (Optimize)
+   if (Optimize && Phase == 2)
    {
       for (i=0 ; i < strlen(FileName) ; ++i) fputc('-',of);
       fprintf(of,"\n%s\n",FileName);
