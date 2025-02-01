@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 06-Jan-2025
+Version: 01-Feb-2025
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -318,7 +318,7 @@ For example:
 
 // Define M_PI
 
-#define _XOPEN_SOURCE 500
+// #define _XOPEN_SOURCE 500
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -330,6 +330,9 @@ For example:
 #include <time.h>
 #include <math.h>
 
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846
+#endif
 int CPU = 6309; // default: Hitachi 6309
 
 #define MAX_STR 1024
@@ -2328,6 +2331,7 @@ char *ListSizeInfo(char *p)
 
 char *IncludeFile(char *p)
 {
+   unsigned long i;
    char FileName[256];
    char *fp;
    p = NeedChar(p,'"');
@@ -2355,6 +2359,13 @@ char *IncludeFile(char *p)
    IncludeStack[IncludeLevel].LiNo = LiNo;
    IncludeStack[++IncludeLevel].fp = sf;
    IncludeStack[IncludeLevel].Src = (char *)StrNDup(FileName,strlen(FileName));
+   if (Optimize)
+   {
+      for (i=0 ; i < strlen(FileName) ; ++i) fputc('-',of);
+      fprintf(of,"\n%s\n",FileName);
+      for (i=0 ; i < strlen(FileName) ; ++i) fputc('=',of);
+      fputc('\n',of);
+   }
    PrintLine();
    LiNo = 0;
    return p+1; // skip quote after filename
@@ -3762,64 +3773,6 @@ char *GenerateCode(char *p)
          exit(1);
       }
 
-      if (Optimize)
-      {
-         // fix short branch to long branch
-
-         if (v < -128 && oc >= 0x20 && oc < 0x30)
-         {
-            if (Phase == 1 || (Phase == 2 && ADL[pc] >= 3))
-            {
-               if (oc == 0x20) // BRA
-               {
-                  oc = 0x16;   // LBRA
-                  ol = 1;
-               }
-               else
-               {
-                  oc |= 0x1000; // short branch -> long branch
-                  ol  = 2;
-               }
-               ql = 2;
-               il = ol + ql;
-            }
-         }
-
-         // optimize long branch to short branch
-
-         if (v >= -128 && v < 0 && oc > 0x1020 && oc < 0x1030)
-         {
-            if (Phase == 1 || (Phase == 2 && ADL[pc] == 2))
-            {
-               oc &= 0xff; // long branch -> short branch
-               ol  = 1;
-               ql  = 1;
-               il  = 2;
-               if (Phase == 2)
-               {
-                  optc++;
-                  fprintf(of,"%4s %4.4x   -->   %3s %2.2x:%5d %s\n",
-                  Mat[MneIndex].Mne,v,Mat[MneIndex].Mne+1,v,LiNo,Line);
-                  strcpy(Hint," ; ");
-                  strcat(Hint,Mat[MneIndex].Mne+1);
-               }
-            }
-         }
-
-         // optimize LBRA to BRA
-
-         if (v >= -128 && v < 0 && oc == 0x16)
-         {
-            if (Phase == 1 || (Phase == 2 && ADL[pc] == 2))
-            {
-               oc  = 0x20; // BRA
-               ol  = 1;
-               ql  = 1;
-               il  = 2;
-            }
-         }
-      }
-
       if (Phase == 2 && ql == 1 && (v < -128 || v > 127))
       {
          ErrorLine(p);
@@ -3833,8 +3786,8 @@ char *GenerateCode(char *p)
          if (Phase == 2 && ql == 2 && v >= -128 && v < 128)
          {
             optc++;
-            fprintf(of,"%4s %4.4x   ***   %3s %2.2x:%5d %s\n",
-               Mat[MneIndex].Mne,v,Mat[MneIndex].Mne+1,v,LiNo,Line);
+            fprintf(of,"%5s",Mat[MneIndex].Mne);
+            fprintf(of,":%5d %s\n",LiNo,Line);
          }
       }
       v &= 0xffff;
@@ -4104,40 +4057,24 @@ char *GenerateCode(char *p)
       if (XIM && df) fprintf(df,"XIM2 oc = %4.4x  v = %4.4x il = %d\n",oc,v,il);
       if (Optimize)
       {
-          // optimise JSR to BSR
+         // optimise JSR to BSR
 
-          rd = v - pc - 3;
-          if (Phase == 2 && oc == 0xbd && rd >= -128 && rd < 128)
-          {
-             optc++;
-             fprintf(of," JSR %4.4x   ***   BSR %2.2x:%5d %s\n",
-                     v,rd&0xff,LiNo,Line);
-          }
+         rd = v - pc - 3;
+         if (Phase == 2 && oc == 0xbd && rd >= -128 && rd < 128)
+         {
+            optc++;
+            fprintf(of,"%5s",Mat[MneIndex].Mne);
+            fprintf(of,":%5d %s\n",LiNo,Line);
+         }
 
          // optimize JMP to BRA
 
          rd = v - pc - 3;
-         if (rd >= -128 && rd < 0)
+         if (Phase == 2 && oc == 0x7e && rd >= -128 && rd < 0)
          {
-            if (Phase == 1 && oc == 0x7e)
-            {
-               oc = 0x20; // BRA
-               ol =  1;
-               ql =  1;
-               il =  2;
-               v  = rd;
-            }
-            if (Phase == 2 && oc == 0x20)
-            {
-               optc++;
-               fprintf(of," JMP %4.4x   -->   BRA %2.2x:%5d %s\n",
-                       v,rd&0xff,LiNo,Line);
-               strcpy(Hint," ; BRA");
-               ol =  1;
-               ql =  1;
-               il =  2;
-               v  = rd;
-            }
+            optc++;
+            fprintf(of,"%5s",Mat[MneIndex].Mne);
+            fprintf(of,":%5d %s\n",LiNo,Line);
          }
       }
    }
@@ -5137,7 +5074,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 06-Jan-2025         *\n");
+      printf("* Bit Shift Assembler 01-Feb-2025         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
@@ -5176,7 +5113,7 @@ int main(int argc, char *argv[])
    {
       if (fclose(of)) AssertFileOp(NULL, "Close hint file");
       if (optc == 0) remove(Opt);
-      if (optc) printf("* Opt   : %-31.31s *\n",Opt);
+      if (optc && !Quiet) printf("* Opt   : %-31.31s *\n",Opt);
    }
    if (!Quiet)
    {
