@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 02-Feb-2025
+Version: 27-Feb-2025
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -363,6 +363,7 @@ FILE *lf; // listing      file
 FILE *df; // debug        file
 FILE *pf; // preprocessed file
 FILE *of; // object       file
+FILE *yf; // symbols      file
 
 // forward references
 
@@ -786,6 +787,7 @@ int MacLev;          // macro nesting level
 int MacList    =  1; // macro listing option
 int ModuleStart;     // address of a module
 int Optimize;        // branch and jump omtimization
+int Symbols    =  1; // write symbols to file
 int FormLn;          // lines per page [inactive]
 int DP;              // current direct page
 int CodeStyle;       // 1: operand has no spaces (old form)
@@ -828,6 +830,7 @@ char *Src;           // source file
 char  Lst[FNSIZE];   // list file
 char  Pre[FNSIZE];   // preprocessed file
 char  Opt[FNSIZE];   // optimzation hints
+char  Sym[FNSIZE];   // symbols
 
 int GenStart = 0x10000 ; //  Lowest assemble address
 int GenEnd   =       0 ; // Highest assemble address
@@ -884,6 +887,7 @@ char datebuffer [80];
 struct LabelStruct
 {
    char *Name;     // Label name - case sensitive
+   char  Type;     // M=module, ...
    int   Address;  // Range 0 - 65536
    int   Bytes;    // Length of object (string for example)
    int   Locked;   // Cannot change value
@@ -1464,7 +1468,7 @@ struct LabelDefStruct
 // DefineLabel
 // ***********
 
-char *DefineLabel(char *p, int *val, int Locked)
+char *DefineLabel(char *p, int *val, int Locked, char Type)
 {
    int i,j,l,v;
    char *rop;
@@ -1500,6 +1504,7 @@ char *DefineLabel(char *p, int *val, int Locked)
       {
          j = Labels;
          lab[j].Name = (char *)StrNDup(Label,l);
+         lab[j].Type = Type;
          lab[j].Address = UNDEF;
          lab[j].Ref = (int *)MallocOrDie(sizeof(int));
          lab[j].Att = (int *)MallocOrDie(sizeof(int));
@@ -1562,6 +1567,7 @@ char *DefineLabel(char *p, int *val, int Locked)
       {
          j = Labels;
          lab[j].Name = (char *)StrNDup(Label,l);
+         lab[j].Type = 'B';
          lab[j].Address = UNDEF;
          lab[j].Ref = (int *)MallocOrDie(sizeof(int));
          lab[j].Att = (int *)MallocOrDie(sizeof(int));
@@ -1589,6 +1595,7 @@ char *DefineLabel(char *p, int *val, int Locked)
       {
          j = Labels;
          lab[j].Name = (char *)StrNDup(Label,l);
+         lab[j].Type = Type;
          lab[j].Address = pc;
          lab[j].Ref = (int *)MallocOrDie(sizeof(int));
          lab[j].Att = (int *)MallocOrDie(sizeof(int));
@@ -2855,7 +2862,7 @@ char *Parsebit5Data(char *p)
 char *ParseSubroutine(char *p)
 {
    p = SkipSpace(p);
-   DefineLabel(p,&ModuleStart,0);
+   DefineLabel(p,&ModuleStart,0,'M');
    strcpy(Scope,Label);
    if (df) fprintf(df,"SCOPE: [%s]\n",Scope);
    if (Phase == 2 && ListOn)
@@ -4594,12 +4601,12 @@ void ParseLine(char *cp)
          {
             if (df) fprintf(df,"LABEL:%s:\n",cp);
             if (df) fprintf(df,"start:%s:\n",start);
-            if (cp == start) cp = DefineLabel(cp,&v,0);
+            if (cp == start) cp = DefineLabel(cp,&v,0,' ');
             else
             {
                if (StrKey(cp,"SET") || StrKey(cp,"ENUM") ||
                    StrKey(cp,"EQU") || strchr(cp,'='))
-                  cp = DefineLabel(cp,&v,0);
+                  cp = DefineLabel(cp,&v,0,'C');
             }
             cp = SkipSpace(cp);         // Skip leading blanks
             if (*cp) m = ExpandMacro(cp);   // Macro after label
@@ -4781,6 +4788,19 @@ void ListSymbols(FILE *lf, int n, int lb, int ub)
             fprintf(lf,"%c",A);
       }
       fprintf(lf,"\n");
+   }
+}
+
+
+void PrintSymbols(void)
+{
+   int i;
+
+   fprintf(yf,"%5d\n",Labels);
+   for (i=0 ; i < Labels; ++i)
+   {
+      if (lab[i].Type == 0) lab[i].Type = ' ';
+      fprintf(yf,"%c %4.4x %s\n",lab[i].Type,lab[i].Address,lab[i].Name);
    }
 }
 
@@ -5015,9 +5035,10 @@ int main(int argc, char *argv[])
       else if (!strcmp(argv[ic],"-m")) CodeStyle  = 1;
       else if (!strcmp(argv[ic],"-n")) WithLiNo   = 1;
       else if (!strcmp(argv[ic],"-o")) Optimize   = 1;
+      else if (!strcmp(argv[ic],"-y")) Symbols    = 1;
       else if (!strcmp(argv[ic],"-p")) Preprocess = 1;
       else if (!strcmp(argv[ic],"-q")) Quiet      = 1;
-      else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,1);
+      else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,1,'D');
       else if (!strncmp(argv[ic],"-l",2))
       {
          if (++ic == argc)
@@ -5077,18 +5098,20 @@ int main(int argc, char *argv[])
    memmove(Pre,Src,l);
    memmove(Lst,Src,l);
    memmove(Opt,Src,l);
+   memmove(Sym,Src,l);
 
    // add extensions
 
    memmove(Pre+l,".pp" ,3);
    memmove(Lst+l,".ls9",4);
    memmove(Opt+l,".opt",4);
+   memmove(Sym+l,".sym",4);
 
    if (!Quiet)
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 02-Feb-2025         *\n");
+      printf("* Bit Shift Assembler 27-Feb-2025         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
@@ -5103,16 +5126,18 @@ int main(int argc, char *argv[])
    }
    IncludeStack[0].fp = sf;
    IncludeStack[0].Src = Src;
-   lf = AssertFileOp(fopen(Lst,"w"), "Open list file");
-   if (Debug) df = AssertFileOp(fopen("Debug.lst","w"), "Open Debug file");
+                   lf = AssertFileOp(fopen(Lst,"w"), "Open list file");
+   if (Debug)      df = AssertFileOp(fopen("Debug.lst","w"), "Open Debug file");
    if (Preprocess) pf = AssertFileOp(fopen(Pre,"w"), "Open preprocessor file");
-   if (Optimize) of = AssertFileOp(fopen(Opt,"w"), "Open hint file");
+   if (Optimize)   of = AssertFileOp(fopen(Opt,"w"), "Open hint file");
+   if (Symbols)    yf = AssertFileOp(fopen(Sym,"w"), "Open symbol file");
 
    Phase1();
    Phase2();
    WriteBinaries();
    ListUndefinedSymbols();
    qsort(lab,Labels,sizeof(struct LabelStruct),CmpAddress);
+   PrintSymbols();
    fprintf(lf,"\n\n%5d Symbols\n",Labels);
    fprintf(lf,"-------------\n");
    ListSymbols(lf,Labels,0,0xffff);
@@ -5121,7 +5146,7 @@ int main(int argc, char *argv[])
    ListSymbols(lf,Labels,0,0x4000);
    if (fclose(sf)) AssertFileOp(NULL, "Close source file");
    if (fclose(lf)) AssertFileOp(NULL, "Close list file");
-
+   if (yf) if (fclose(yf)) AssertFileOp(NULL, "Close symbol file");
    if (df) if (fclose(df)) AssertFileOp(NULL, "Close debug file");
    if (Optimize)
    {
