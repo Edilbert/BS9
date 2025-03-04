@@ -5137,7 +5137,7 @@ int main(int argc, char *argv[])
    WriteBinaries();
    ListUndefinedSymbols();
    qsort(lab,Labels,sizeof(struct LabelStruct),CmpAddress);
-   PrintSymbols();
+   if (yf) PrintSymbols();
    fprintf(lf,"\n\n%5d Symbols\n",Labels);
    fprintf(lf,"-------------\n");
    ListSymbols(lf,Labels,0,0xffff);
