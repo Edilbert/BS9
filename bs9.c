@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 27-Feb-2025
+Version: 13-Apr-2025
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -344,16 +344,6 @@ int CPU = 6309; // default: Hitachi 6309
 
 unsigned char ROM[0x10100]; // binary
 
-// Used to detect overwrite attempts
-
-unsigned char LOCK[0x10100]; // binary
-
-// A two pass assembler must set the instruction length in phase 1
-// These values are stored in ADL, in order to avoid phase errors
-//  0: no code generated for this address
-// >0: instruction length locked
-// <0: data byte or not start byte of instruction
-
 int ErrNum;          // error count
 int ListGlobal = 1;  // global listing control
 int ListOn = 1;      // listing control
@@ -376,24 +366,23 @@ char *ExtractValue(char *, int *);
 
 // store code or data into ROM array
 
-// ***
-// Put
-// ***
+// *******
+// PutByte
+// *******
 
-void Put(int i, int v, char *p)
+void PutByte(int i, int v)
 {
-   if (df) fprintf(df,"LOCK[%4.4x]=%x  ROM[%4.4x]=%x  v=%4.4x\n",
-                      i,LOCK[i],i,ROM[i],v);
-   v &= 0xff;
-   if (LOCK[i] && ROM[i] != v)
-   {
-      ++ErrNum;
-      if (p) ErrorLine(p);
-      ErrorMsg("Tried to overwrite address %4.4x\n",i);
-      exit(1);
-   }
-   ROM[i]  = v;
-   LOCK[i] = 1;
+   ROM[i] = v & 0xff;
+}
+
+// *******
+// PutWord
+// *******
+
+void PutWord(int i, int v)
+{
+   ROM[i]   = v >> 8  ;
+   ROM[i+1] = v & 0xff;
 }
 
 // **********
@@ -491,6 +480,18 @@ enum Addressing_Mode
    AM_Indexed     , // 6
    AM_Extended      // 7
 };
+
+// Opcodes used in branch & jump optmisation
+
+#define OP_LBRA    0x16
+#define OP_BRA     0x20
+#define OP_BHI     0x22
+#define OP_LBHI  0x1022
+#define OP_BLE     0x2F
+#define OP_LBLE  0x102F
+#define OP_JMP_E   0x7E
+#define OP_BSR     0x8D
+#define OP_JSR_E   0xBD
 
 struct MatStruct
 {
@@ -728,7 +729,15 @@ struct MatStruct
    {"BEOR"    ,{1,    -1,    -1,    -1,    -1,0x1134,    -1,    -1}},
    {"BIEOR"   ,{1,    -1,    -1,    -1,    -1,0x1135,    -1,    -1}},
    {"LDBT"    ,{1,    -1,    -1,    -1,    -1,0x1136,    -1,    -1}},
-   {"STBT"    ,{1,    -1,    -1,    -1,    -1,0x1137,    -1,    -1}}
+   {"STBT"    ,{1,    -1,    -1,    -1,    -1,0x1137,    -1,    -1}},
+
+//   6309      0       1      2      3      4      5      6      7
+//   Mnem    CPU   Inher    Reg   Rela    Imm Direct    Ind    Ext
+// ---------------------------------------------------------------
+   {"DEX"     ,{2,0x301F,    -1,    -1,    -1,    -1,    -1,    -1}},
+   {"DEY"     ,{2,0x313F,    -1,    -1,    -1,    -1,    -1,    -1}},
+   {"INX"     ,{2,0x3001,    -1,    -1,    -1,    -1,    -1,    -1}},
+   {"INY"     ,{2,0x3121,    -1,    -1,    -1,    -1,    -1,    -1}}
  };
 
 #define DIMOP_6809 139
@@ -793,6 +802,13 @@ int DP;              // current direct page
 int CodeStyle;       // 1: operand has no spaces (old form)
 int MneIndex;        // current mnemonic
 
+#define MAXPASS 10
+int BOC[MAXPASS];    // branch opt count
+int MaxPass=MAXPASS;
+int Pass;            // pass counter
+int Changes;         // label address changes
+int Unresolved;      // pass 1 counter
+
 int oc;              // op code
 int pb;              // post byte
 int am;              // address mode
@@ -802,16 +818,13 @@ int pl;              // postbyte length
 int ql;              // operand length
 int pc = -1;         // program counter
 int bss;             // bss counter
-int nops;            // snychronisation nops
 
-int Phase;           // phase or pass of 2-pass assembler
 int IfLevel;         // if nesting level
 int Skipping;        // inside 'false' branch
 int SkipLine[10];    // skipping value for each nesting level
 int ForcedEnd;       // Triggered by END command
 int IgnoreCase;      // 1: Ignore case for symbols
 int ForcedMode;      // -1: direct page, +1: extended
-int optc;            // count optimization messages
 int Preset;          // value for initialisation
 
 // local labels
@@ -829,7 +842,6 @@ int plulab[11][PLUMAX];
 char *Src;           // source file
 char  Lst[FNSIZE];   // list file
 char  Pre[FNSIZE];   // preprocessed file
-char  Opt[FNSIZE];   // optimzation hints
 char  Sym[FNSIZE];   // symbols
 
 int GenStart = 0x10000 ; //  Lowest assemble address
@@ -848,8 +860,6 @@ int SFT[SFMAX];      // file format
 int StoreCount = 0;  // number of segments to store
 
 enum OutfileFormat { BINARY, SRECORD, SPARROW };
-
-signed char ADL[0x10000];
 
 // organize nesting of include files
 
@@ -871,7 +881,6 @@ char MacArgs[ML];            // macro arguments
 unsigned char Operand[ML];   // binary operand
 char OpText[ML];             // operand source
 char Comment[ML];            // comment source
-char Hint[ML];               // optimization hints
 char Scope[ML];              // for local symbols
 char datebuffer [80];
 
@@ -1162,7 +1171,7 @@ void ErrorMsg(const char *format, ...) {
    {
       fputs(Line, df);
       fputs(buf, df);
-      ListSymbols(df,Labels,0,0xffff);
+      // ListSymbols(df,Labels,0,0xffff);
    }
    free(buf);
 }
@@ -1174,7 +1183,7 @@ void ErrorMsg(const char *format, ...) {
 
 void PrintLiNo(void)
 {
-   if (ListOn && WithLiNo && Phase == 2) fprintf(lf,"%5d ",LiNo);
+   if (WithLiNo) fprintf(lf,"%5d ",LiNo);
 }
 
 
@@ -1184,7 +1193,7 @@ void PrintLiNo(void)
 
 void PrintPC(void)
 {
-   if (ListOn && Phase == 2)
+   if (!Pass)
    {
       PrintLiNo();
       fprintf(lf,"%4.4x",pc);
@@ -1220,12 +1229,9 @@ void PrintOC(int v)
 
    // address or value 16 bit, 8 bit or none
 
-        if (nops == 2 && ql == 0) fprintf(lf," 1212");
-   else if (nops == 1 && ql == 0) fprintf(lf," 12  ");
-   else if (nops == 1 && ql == 1) fprintf(lf," %2.2x12",v&0xff);
-   else if (  ql == 2) fprintf(lf," %4.4x",v&0xffff);
-   else if (  ql == 1) fprintf(lf,"   %2.2x",v&0xff);
-   else                fprintf(lf,"     ");
+        if (ql == 2) fprintf(lf," %4.4x",v&0xffff);
+   else if (ql == 1) fprintf(lf,"   %2.2x",v&0xff);
+   else              fprintf(lf,"     ");
 }
 
 // *********
@@ -1234,7 +1240,7 @@ void PrintOC(int v)
 
 void PrintLine(void)
 {
-   if (!ListOn || Phase < 2) return;
+   if (!ListOn || Pass) return;
    PrintLiNo();
    fprintf(lf,"                  %s\n",Line);
 }
@@ -1245,7 +1251,7 @@ void PrintLine(void)
 
 void PrintPCLine(void)
 {
-   if (!ListOn || Phase < 2) return;
+   if (!ListOn || Pass) return;
    PrintPC();
    fprintf(lf,"              %s\n",Line);
 }
@@ -1256,7 +1262,7 @@ void PrintPCLine(void)
 
 void PrintByteLine(int b)
 {
-   if (!ListOn || Phase < 2) return;
+   if (!ListOn || Pass) return;
    PrintLiNo();
    fprintf(lf,"       %2.2x",b);
    fprintf(lf,"         %s\n",Line);
@@ -1268,7 +1274,7 @@ void PrintByteLine(int b)
 
 void PrintWordLine(int w)
 {
-   if (!ListOn || Phase < 2) return;
+   if (!ListOn || Pass) return;
    PrintLiNo();
    fprintf(lf,"%4.4x",w);
    fprintf(lf,"              %s\n",Line);
@@ -1347,7 +1353,7 @@ char *SetBSS(char *p)
       exit(1);
    }
    p = ExtractValue(p+1,&bss);
-   if (ListOn && Phase == 2)
+   if (ListOn && !Pass)
    {
       PrintLiNo();
       fprintf(lf,"%4.4x              %s\n",bss,Line);
@@ -1445,7 +1451,7 @@ char *ExtractOpText(char *p)
       while (l && isspace(OpText[l-1])) OpText[--l] = 0;
    }
    OpText[l] = 0; // end marker
-   if (df) fprintf(df,"OpText = [%s]\n",OpText);
+   // if (df) fprintf(df,"OpText = [%s]\n",OpText);
    return p;      // points to comment start or EOL
 }
 
@@ -1468,7 +1474,7 @@ struct LabelDefStruct
 // DefineLabel
 // ***********
 
-char *DefineLabel(char *p, int *val, int Locked, char Type)
+char *DefineLabel(char *p, int *val, char Type)
 {
    int i,j,l,v;
    char *rop;
@@ -1495,10 +1501,7 @@ char *DefineLabel(char *p, int *val, int Locked, char Type)
 
    if (i < LABTYPES) // label definition
    {
-      if (df) fprintf(df,"LABVAL:%s:\n",p);
-      if (df) fprintf(df,"Length:%d Index:%d\n",LabDef[i].Length,i);
       p += LabDef[i].Length;   // add keyword length
-      if (df) fprintf(df,"---VAL:%s:\n",p);
       j = LabelIndex(Label);
       if (j < 0)
       {
@@ -1506,6 +1509,7 @@ char *DefineLabel(char *p, int *val, int Locked, char Type)
          lab[j].Name = (char *)StrNDup(Label,l);
          lab[j].Type = Type;
          lab[j].Address = UNDEF;
+         lab[j].Locked  = 1;
          lab[j].Ref = (int *)MallocOrDie(sizeof(int));
          lab[j].Att = (int *)MallocOrDie(sizeof(int));
          Labels++;
@@ -1537,7 +1541,6 @@ char *DefineLabel(char *p, int *val, int Locked, char Type)
          }
          *val = v;
          if (LabDef[i].Type > 0) EnumValue = v;
-         if (Locked) lab[j].Locked = Locked;
       }
       else if (LabDef[i].Type > 0) // ENUM
       {
@@ -1558,6 +1561,7 @@ char *DefineLabel(char *p, int *val, int Locked, char Type)
          ErrorMsg("Missing operand\n");
          exit(1);
       }
+      if (df) fprintf(df,"Define:%s=%4.4X\n",lab[j].Name,lab[j].Address);
    }
    else if (!strcmpword(p,"BSS"))
    {
@@ -1604,22 +1608,20 @@ char *DefineLabel(char *p, int *val, int Locked, char Type)
       else if (lab[j].Address == UNDEF) lab[j].Address = pc;
       else if (lab[j].Address != pc && !lab[j].Locked)
       {
-         ++ErrNum;
-         if (Phase == 1)
+         if (Pass)
          {
-            ErrorMsg("Multiple label definition [%s]"
-                     " value 1: %4.4x   value 2: %4.4x\n",
-                     Label, lab[j].Address,pc);
+            lab[j].Address = pc;
+            ++Changes;
          }
          else
          {
             ErrorMsg("Phase error label [%s]"
                      " phase 1: %4.4x   phase 2: %4.4x\n",
                      Label,lab[j].Address,pc);
+            exit(1);
          }
-         exit(1);
       }
-      if (!lab[j].Locked) *val = pc;
+      *val = pc;
       lab[j].Ref[0] = LiNo;
       lab[j].Att[0] = LPOS;
    }
@@ -1631,7 +1633,7 @@ void SymRefs(int i)
 {
    int n;
 
-   if (Phase != 2) return;
+   if (Pass) return;
    n = ++lab[i].NumRef;
    lab[i].Ref = (int *)ReallocOrDie(lab[i].Ref,(n+1)*sizeof(int));
    lab[i].Ref[n] = LiNo;
@@ -1786,9 +1788,9 @@ char *ParseRealData(char *p, int ldq)
 
    if (!ldq)
    {
-      if (Phase == 2)
+      if (!Pass)
       {
-         for (i=0 ; i < mansize+1 ; ++i) Put(pc+i,Operand[i],p);
+         for (i=0 ; i < mansize+1 ; ++i) PutByte(pc+i,Operand[i]);
          if (ListOn)
          {
             PrintPC();
@@ -2045,7 +2047,7 @@ char *EvalOperand(char *p, int *v, int prio)
 
    p = SkipSpace(p);
    c = *p;
-   if (df) fprintf(df,"EvalOperand <%s>\n",p);
+   if (df) fprintf(df,"Eval <%s>",p);
 
    if (c == ',' )  return p; // comma separator
 
@@ -2118,8 +2120,12 @@ char *EvalOperand(char *p, int *v, int prio)
    }
    *v = r;
    if (CodeStyle == 1 && *p == ' ') p += strlen(p);
-   if (df) fprintf(df,"Result: %4x %d\n",r,r);
-   if (df) fprintf(df,"Rest  : %s\n",p);
+   if (df)
+   {
+      fprintf(df," -> %4x %d",r,r);
+      if (*p) fprintf(df,"  Rest:%s\n",p);
+      else    fprintf(df,"\n");
+   }
    return p;
 }
 
@@ -2208,11 +2214,11 @@ char *ParseWordData(char *p)
    {
        if (lab[j].Address == pc) lab[j].Bytes = l;
    }
-   if (Phase == 2)
+   if (!Pass)
    {
       for (i=0 ; i < l ; ++i)
       {
-         Put(pc+i,ByteBuffer[i],p);
+         PutByte(pc+i,ByteBuffer[i]);
          if (ListOn && (i == 0 || i == 2))
             fprintf(lf," %2.2x%2.2x",ByteBuffer[i],ByteBuffer[i+1]);
       }
@@ -2260,11 +2266,11 @@ char *ParseLongData(char *p)
    {
        if (lab[j].Address == pc) lab[j].Bytes = l;
    }
-   if (Phase == 2)
+   if (!Pass)
    {
       for (i=0 ; i < l ; ++i)
       {
-         Put(pc+i,ByteBuffer[i],p);
+         PutByte(pc+i,ByteBuffer[i]);
          if (ListOn && (i == 0 || i == 2))
             fprintf(lf," %2.2x%2.2x",ByteBuffer[i],ByteBuffer[i+1]);
       }
@@ -2298,9 +2304,9 @@ char *ParseFillData(char *p)
    }
    p = EvalOperand(p+1,&v,0);
    v &= 0xff;
-   if (Phase == 2)
+   if (!Pass)
    {
-      for (i=0 ; i < m ; ++i) Put(pc+i,v,p);
+      for (i=0 ; i < m ; ++i) PutByte(pc+i,v);
       if (ListOn)
       {
          PrintPC();
@@ -2324,7 +2330,7 @@ char *ListSizeInfo(char *p)
    p += strlen(p);
 
    if (!ModuleStart) return p;
-   if (ListOn && Phase == 2)
+   if (ListOn && !Pass)
    {
       i = AddressIndex(ModuleStart);
       if (i >= 0)
@@ -2341,7 +2347,6 @@ char *ListSizeInfo(char *p)
 
 char *IncludeFile(char *p)
 {
-   unsigned long i;
    char FileName[256];
    char *fp;
    p = NeedChar(p,'"');
@@ -2369,13 +2374,6 @@ char *IncludeFile(char *p)
    IncludeStack[IncludeLevel].LiNo = LiNo;
    IncludeStack[++IncludeLevel].fp = sf;
    IncludeStack[IncludeLevel].Src = (char *)StrNDup(FileName,strlen(FileName));
-   if (Optimize && Phase == 2)
-   {
-      for (i=0 ; i < strlen(FileName) ; ++i) fputc('-',of);
-      fprintf(of,"\n%s\n",FileName);
-      for (i=0 ; i < strlen(FileName) ; ++i) fputc('=',of);
-      fputc('\n',of);
-   }
    PrintLine();
    LiNo = 0;
    return p+1; // skip quote after filename
@@ -2386,7 +2384,7 @@ char *ParseStoreData(char *p)
    int Start,Length,FileFormat,Entry;
    char *Filename,*EndPtr;
 
-   if (Phase < 2) return p + strlen(p);
+   if (Pass) return p + strlen(p);
    p = EvalOperand(p,&Start,0);
    if (Start < 0 || Start > 0xfffff)
    {
@@ -2476,7 +2474,7 @@ char *ParseStoreData(char *p)
 
 char *ParseLoadData(char *p)
 {
-   int i,Start,Size,Advance;
+   int Start,Size,Advance;
    char *Filename,*EndPtr;
    FILE *lp;
 
@@ -2524,18 +2522,7 @@ char *ParseLoadData(char *p)
       exit(1);
    }
 
-   if (Phase == 2)
-   for (i=Start; i < Start+Size ; ++i)
-   {
-      if (LOCK[i])
-      {
-         ErrorMsg("LOAD would overwrite defined values\n");
-         ErrorLine(p);
-         exit(1);
-      }
-      LOCK[i] = 1;
-   }
-   fread(ROM+Start,Size,1,lp);
+   if (!Pass) fread(ROM+Start,Size,1,lp);
    fclose(lp);
    if (Advance) pc += Size;
    p += strlen(p);
@@ -2553,7 +2540,7 @@ char *ParseBSSData(char *p)
       ErrorMsg("Illegal BSS size %d\n",m);
       exit(1);
    }
-   if (ListOn && Phase == 2)
+   if (ListOn && !Pass)
       fprintf(lf,"%4.4x             %s\n",bss,Line);
    bss += m;
    return p;
@@ -2580,7 +2567,7 @@ char *ParseCPUData(char *p)
       ErrorMsg("Unknown CPU %d - use 6809 or 6309\n",CPU);
       exit(1);
    }
-   if (ListOn && Phase == 2)
+   if (ListOn && !Pass)
    {
       PrintLiNo();
       fprintf(lf,"%4d              %s\n",CPU,Line);
@@ -2602,7 +2589,7 @@ char *ParseOnOff(char *p, int *v)
       ErrorMsg("Unknown option\n");
       exit(1);
    }
-   if (ListOn && Phase == 2)
+   if (ListOn && !Pass)
    {
       PrintLiNo();
       fprintf(lf,"                  %s\n",Line);
@@ -2627,10 +2614,10 @@ char *ParseBitData(char *p)
          exit(1);
       }
    }
-   if (ListOn && Phase == 2)
+   if (ListOn && !Pass)
    {
       PrintPC();
-      Put(pc,v,p);
+      PutByte(pc,v);
       fprintf(lf," %2.2x           ",v);
       fprintf(lf,"%s\n",Line);
    }
@@ -2657,11 +2644,11 @@ char *ParseCmapData(char *p)
          exit(1);
       }
    }
-   if (Phase == 2)
+   if (!Pass)
    {
       if (ListOn) PrintPC();
-      if (scanline < 0) Put(pc,v,p);
-      else Put(pc+2*scanline-7,v,p);
+      if (scanline < 0) PutByte(pc,v);
+      else PutByte(pc+2*scanline-7,v);
       if (ListOn)
       {
          fprintf(lf," %2.2x       ",v);
@@ -2747,7 +2734,7 @@ char *ParseByteData(char *p)
       {
          v = UNDEF;
          p = EvalOperand(p,&v,0);
-         if (v == UNDEF && Phase == 2)
+         if (v == UNDEF && !Pass)
          {
             ErrorMsg("Undefined symbol in BYTE data\n");
             ErrorLine(p);
@@ -2778,11 +2765,11 @@ char *ParseByteData(char *p)
    }
    if (j >= 0 && df) fprintf(df,"Byte label [%s] $%4.4x $%4.4x %d bytes\n",
                    lab[j].Name,lab[j].Address,pc,l);
-   if (Phase == 2)
+   if (!Pass)
    {
       for (i=0 ; i < l ; ++i)
       {
-         Put(pc+i,ByteBuffer[i],p);
+         PutByte(pc+i,ByteBuffer[i]);
          if (ListOn && i < 4) fprintf(lf," %2.2x",ByteBuffer[i]);
       }
       if (ListOn)
@@ -2842,12 +2829,12 @@ char *Parsebit5Data(char *p)
    else if (p[5] == 'R') v |= (3 << 20);
    else if (p[5] == 'W') v |= (4 << 20);
 
-   if (Phase == 2)
+   if (!Pass)
    {
       if (ListOn) fprintf(lf," %6.6x       %s\n",v,Line);
       for (i=2 ; i >= 0 ; --i)
       {
-         Put(pc+i,v & 0xff,p);
+         PutByte(pc+i,v);
          v >>= 8;
       }
    }
@@ -2862,10 +2849,9 @@ char *Parsebit5Data(char *p)
 char *ParseSubroutine(char *p)
 {
    p = SkipSpace(p);
-   DefineLabel(p,&ModuleStart,0,'M');
+   DefineLabel(p,&ModuleStart,'M');
    strcpy(Scope,Label);
-   if (df) fprintf(df,"SCOPE: [%s]\n",Scope);
-   if (Phase == 2 && ListOn)
+   if (!Pass && ListOn)
    {
       fprintf(lf,"              %s\n",Line);
    }
@@ -2878,7 +2864,7 @@ char *ParseSubroutine(char *p)
 
 char *EndSub(char *p)
 {
-   if (Phase == 2 && ListOn)
+   if (!Pass && ListOn)
    {
       PrintPC();
       p = ListSizeInfo(p);
@@ -3120,51 +3106,6 @@ void AddLabel(char *p)
 }
 
 
-void SetInstructionLength(char *p)
-{
-   int i;
-
-   // Store opcode
-
-   if (oc >= 0)
-   {
-      if (oc < 256)  Put(pc,oc,p);
-      else
-      {
-         if (df) fprintf(df,"Put ROM[%4.4x] = %4.4x\n",pc,oc);
-         Put(pc  ,oc >> 8  ,p);
-         Put(pc+1,oc & 0xff,p);
-      }
-   }
-
-   // Lock instruction length
-
-   if (pc >= 0 && pc < 0x10000)
-   {
-      if (ADL[pc] != 0 && ADL[pc] != il)
-      {
-         ErrorMsg("Phase error\n");
-         ErrorLine(p);
-         exit(1);
-      }
-      ADL[pc] = il;
-      for (i=1 ; i < il ; ++i) ADL[pc+i] = -1;
-   }
-   if (df) fprintf(df,"lock oc = %4.2x il = %d ol = %d\n",oc,il,ol);
-}
-
-
-void Synchronize(void)
-{
-   nops = ADL[pc] - il;
-   if (df) fprintf(df,"oc = %4.2x ol=%d ql=%d il=%d\n",oc,ol,ql,il);
-   if (df && nops) fprintf(df,"Add %d NOP's\n",nops);
-   il = ADL[pc];
-   if (df) fprintf(df,"SYnc lock[%4.4x] = %d\n",pc,LOCK[pc]);
-   if (nops) LOCK[pc] = 0;
-}
-
-
 void CheckSkip(void)
 {
    int i;
@@ -3177,9 +3118,8 @@ int CheckCondition(char *p)
 {
    int r,v,Ifdef,Ifndef,Ifval;
    r = 0;
-   if (df) fprintf(df,"Check <%s>\n",p);
    if (*p == '#') ++p; // old syntax #if, #endif, etc.
-   if (!strcmpword(p,"error") && (Phase == 1))
+   if (!strcmpword(p,"error") && Pass)
    {
       CheckSkip();
       if (Skipping) return 0;     // Include line in listing
@@ -3215,7 +3155,7 @@ int CheckCondition(char *p)
          SkipLine[IfLevel] = v == UNDEF || v == 0;
       }
       CheckSkip();
-      if (ListOn && Phase == 2)
+      if (ListOn && !Pass)
       {
          PrintLiNo();
          if (SkipLine[IfLevel])
@@ -3231,7 +3171,7 @@ int CheckCondition(char *p)
       SkipLine[IfLevel] = !SkipLine[IfLevel];
       CheckSkip();
       PrintLiNo();
-      if (ListOn && Phase == 2) fprintf(lf,"              %s\n",Line);
+      if (ListOn && !Pass) fprintf(lf,"              %s\n",Line);
    }
    if (!strcmpword(p,"endif"))
    {
@@ -3239,7 +3179,7 @@ int CheckCondition(char *p)
       r = 1;
       IfLevel--;
       PrintLiNo();
-      if (ListOn && Phase == 2) fprintf(lf,"              %s\n",Line);
+      if (ListOn && !Pass) fprintf(lf,"              %s\n",Line);
       if (IfLevel < 0)
       {
          ++ErrNum;
@@ -3589,7 +3529,7 @@ int ScanPushList(char *p)
 char *GenerateCode(char *p)
 {
    int ibi = 0; // instruction byte index
-   int i,l,v,rd;
+   int i,l,v,relv;
    int r1,r2,qc,XIM;
    char *q;
    char *rop;   // rest of operand
@@ -3644,6 +3584,7 @@ char *GenerateCode(char *p)
    if ((oc = Mat[MneIndex].Opc[AM_Inherent]) >= 0)
    {
       ol = il = 1 + (oc > 255); // instruction length
+      ql = 0;
       p += strlen(p) ;          // ignore rest
    }
 
@@ -3739,11 +3680,20 @@ char *GenerateCode(char *p)
 
    // relative address mode
 
+   // BRA[20] : LBRA[16]
+   // BHI[22] : LBHI[1022]
+   // BLE[2F] : LBLE[102F]
+
    else if ((oc = Mat[MneIndex].Opc[AM_Relative]) >= 0)
    {
-      ol = 1 + (oc > 255); // operand length = opcode length
-      ql = 1 + (Mat[MneIndex].Mne[0] == 'L');
-      il = ol + ql;
+      // make all branches short by default
+
+      if (oc >= OP_LBHI && oc <= OP_LBLE) oc &= 0xff;
+      if (oc == 0x16) oc = 0x20; // LBRA -> BRA
+      ol = 1;
+      ql = 1;
+      il = 2;
+
       if (OpText[0] == '-') // local backward label
       {
          l = strlen(OpText);
@@ -3775,33 +3725,48 @@ char *GenerateCode(char *p)
          else EvalOperand(OpText,&v,0);
       }
       else EvalOperand(OpText,&v,0);
-      if (v != UNDEF) v  -= (pc + il);
-      if (Phase == 2 && v == UNDEF)
+      relv = v;
+      if (v != UNDEF) relv -= (pc + il);
+      else if (Pass == 1) ++Unresolved;
+      if (Pass != 1 && v == UNDEF)
       {
          ErrorLine(p);
          ErrorMsg("Branch to undefined label\n");
          exit(1);
       }
 
-      if (Phase == 2 && ql == 1 && (v < -128 || v > 127))
+      if (relv != UNDEF && (relv < -128 || relv > 127)) // long branch
       {
-         ErrorLine(p);
-         ErrorMsg("Short Branch out of range (%d)\n",v);
-         exit(1);
-      }
-      if (df) fprintf(df,"branch %4.4x -> %4.4x : %4.4x\n",pc,v,v-pc-il);
-
-      if (Optimize)
-      {
-         if (Phase == 2 && ql == 2 && v >= -128 && v < 128)
+         if (oc == OP_BRA)
          {
-            optc++;
-            fprintf(of,"%5s",Mat[MneIndex].Mne);
-            fprintf(of,":%5d %s\n",LiNo,Line);
+            oc = OP_LBRA;
+            ol = 1;
+            ql = 2;
+            il = 3;
+         }
+         else
+         {
+            oc += 0x1000; // long branch
+            ol = 2;
+            ql = 2;
+            il = 4;
+         }
+         relv = v - pc - il;
+      }
+      v = relv;
+      if (ql == 1) v &= 0xff;
+      else         v &= 0xffff;
+      p += strlen(p) ;          // ignore rest
+
+      if (df)
+      {
+         if (v == UNDEF) fprintf(df,"Unres branch %4.4x\n",pc);
+         else
+         {
+            if (il==2) fprintf(df,"Short branch %4.4x -> %4.4x :%5d\n",pc,v,v-pc-il);
+            else       fprintf(df,"Long  branch %4.4x -> %4.4x :%5d\n",pc,v,v-pc-il);
          }
       }
-      v &= 0xffff;
-      p += strlen(p) ;          // ignore rest
    }
 
    // immediate address mode
@@ -3839,19 +3804,19 @@ char *GenerateCode(char *p)
       if (oc == 0x118d) ql = 1; // DIVD uses byte operand
       if (ql == 4 && oc != 0xcd) ql = 2; // only LDQ immediate has 32 bit value
       il = ol + ql;
-      if (Phase == 2 && v == UNDEF)
+      if (!Pass && v == UNDEF)
       {
          ErrorLine(p);
          ErrorMsg("Undefined immediate value\n");
          exit(1);
       }
-      if (ql == 1 && Phase == 2 && (v < -128 || v > 255))
+      if (ql == 1 && !Pass && (v < -128 || v > 255))
       {
          ErrorLine(p);
          ErrorMsg("Immediate value out of range (%d)\n",v);
          exit(1);
       }
-      if (ql == 2 && Phase == 2 && (v < -32768 || v > 0xffff))
+      if (ql == 2 && !Pass && (v < -32768 || v > 0xffff))
       {
          ErrorLine(p);
          ErrorMsg("Immediate value out of range (%d)\n",v);
@@ -4015,96 +3980,78 @@ char *GenerateCode(char *p)
          if (df) fprintf(df,"XIM oc = %4.4x  v = %4.4x il = %d\n",oc,v,il);
       }
 
-      if (Phase == 2) // opcode and instruction length is set in phase 1
+      // extended address mode
+
+      if (!XIM) oc = Mat[MneIndex].Opc[AM_Extended];
+      if (oc >= 0)
       {
-         if (XIM)
+         // assume extended mode
+
+         ol = 1 + (oc > 255); // opcode  length
+         ql = 2;              // operand length
+         il = ol + 2;         // instruction length
+
+         // direct address mode
+
+         if (ForcedMode <= 0) // not forced extended
          {
-            oc = (ROM[pc] << 8) + ROM[pc+1];
-            il = ADL[pc];
-            ql = il - ol;
-            if (df) fprintf(df,"ROM oc = %4.4x  v = %4.4x\n",oc,v);
+            if (XIM) qc = oc & 0xfff;
+            else     qc = Mat[MneIndex].Opc[AM_Direct];
+
+            if (qc >= 0 && (ForcedMode < 0 ||
+               (v != UNDEF && (v >> 8) == DP)))
+            {
+               oc = qc;
+               v &= 0xff;
+               ql = 1;
+               il = ol + 1;
+            }
          }
-         else
+
+         // replace short JMP with BRA
+
+         if (oc == OP_JMP_E && v != UNDEF)
          {
-            oc = ROM[pc];
-            if (df) fprintf(df,"ROM oc = %4.4x  v = %4.4x\n",oc,v);
-            ol = 1 + (oc == 0x10 || oc == 0x11);
-            if (ol == 2) oc = (oc << 8) | ROM[pc+1];
-            il = ADL[pc];
-            ql = il - ol;
-            if (ForcedMode < 0 || ql == 1) v &= 0xff;
+            relv = v - pc - 2;
+            if (relv >= -128 && relv <= 127) // short branch
+            {
+               oc = OP_BRA;
+               ol = 1;
+               ql = 1;
+               il = 2;
+               v = relv & 0xff;;
+            }
          }
+
+         // replace short JSR with BSR
+
+         if (oc == OP_JSR_E && v != UNDEF)
+         {
+            relv = v - pc - 2;
+            if (relv >= -128 && relv <= 127) // short branch
+            {
+               oc = OP_BSR;
+               ol = 1;
+               ql = 1;
+               il = 2;
+               v = relv & 0xff;;
+            }
+         }
+
+         p += strlen(p) ;          // ignore rest
       }
       else
       {
-         // extended address mode
-
-         if (!XIM) oc = Mat[MneIndex].Opc[AM_Extended];
-         if (oc >= 0)
-         {
-            // assume extended mode
-
-            ol = 1 + (oc > 255); // opcode  length
-            ql = 2;              // operand length
-            il = ol + 2;         // instruction length
-
-            // direct address mode
-
-            if (ForcedMode <= 0) // not forced extended
-            {
-               if (XIM) qc = oc & 0xfff;
-               else     qc = Mat[MneIndex].Opc[AM_Direct];
-
-               if (qc >= 0 && (ForcedMode < 0 ||
-                  (v != UNDEF && (v >> 8) == DP)))
-               {
-                  oc = qc;
-                  v &= 0xff;
-                  ql = 1;
-                  il = ol + 1;
-      if (XIM && df) fprintf(df,"XIM3 oc = %4.4x  v = %4.4x il = %d\n",oc,v,il);
-               }
-            }
-         }
-         else
-         {
-            ++ErrNum;
-            ErrorLine(p);
-            ErrorMsg("Illegal instruction %s %s\n",Mat[MneIndex].Mne,OpText);
-            exit(1);
-         }
-      }
-
-      if (XIM && df) fprintf(df,"XIM2 oc = %4.4x  v = %4.4x il = %d\n",oc,v,il);
-      if (Optimize)
-      {
-         // optimise JSR to BSR
-
-         rd = v - pc - 3;
-         if (Phase == 2 && oc == 0xbd && rd >= -128 && rd < 128)
-         {
-            optc++;
-            fprintf(of,"%5s",Mat[MneIndex].Mne);
-            fprintf(of,":%5d %s\n",LiNo,Line);
-         }
-
-         // optimize JMP to BRA
-
-         rd = v - pc - 3;
-         if (Phase == 2 && oc == 0x7e && rd >= -128 && rd < 0)
-         {
-            optc++;
-            fprintf(of,"%5s",Mat[MneIndex].Mne);
-            fprintf(of,":%5d %s\n",LiNo,Line);
-         }
+         ++ErrNum;
+         ErrorLine(p);
+         ErrorMsg("Illegal instruction %s %s\n",Mat[MneIndex].Mne,OpText);
+         exit(1);
       }
    }
 
-   if (Phase == 1) SetInstructionLength(p);
 
-   if (Phase == 2)
+   if (!Pass)
    {
-      Synchronize();
       if (v == UNDEF && ql > 0)
       {
          ErrorLine(p);
@@ -4114,33 +4061,31 @@ char *GenerateCode(char *p)
 
       // insert binary code
 
-      if (df) fprintf(df,"PUT OC = %4.4x\n",oc);
       if (oc > 255) // two byte opcode
       {
-         Put(pc,oc >> 8,p);
-         Put(pc+1,oc,p);
+         PutWord(pc,oc);
          ibi = 2;
       }
       else
       {
-         Put(pc,oc,p);
+         PutByte(pc,oc);
          ibi = 1;
       }
 
       if (pb >= 0) // post byte
       {
-         Put(pc+ibi++,pb,p);
+         PutByte(pc+ibi++,pb);
       }
 
       if (ql == 4) // 32 bit value
       {
-         Put(pc+ibi++,v >> 24,p);
-         Put(pc+ibi++,v >> 16,p);
-         Put(pc+ibi++,v >>  8,p);
-         Put(pc+ibi++,v      ,p);;
+         PutByte(pc+ibi++,v >> 24);
+         PutByte(pc+ibi++,v >> 16);
+         PutByte(pc+ibi++,v >>  8);
+         PutByte(pc+ibi++,v      );;
       }
 
-      if (ql == 2) // 16 bit value
+      else if (ql == 2) // 16 bit value
       {
          if (v > 0xffff || v < -32768)
          {
@@ -4148,11 +4093,10 @@ char *GenerateCode(char *p)
             ErrorMsg("16 bit address/value out of range\n");
             exit(1);
          }
-         Put(pc+ibi++,v >> 8,p);
-         Put(pc+ibi++,v     ,p);
+         PutWord(pc+ibi,v);
       }
 
-      if (ql == 1) //  8 bit value
+      else if (ql == 1) //  8 bit value
       {
          if (v >= 0xff00 && v <= 0xffff) v &= 0xff;
          if ((v-(DP<<8)) < 256 && (v-(DP<<8)) >= -128) v -= DP<<8;
@@ -4163,25 +4107,14 @@ char *GenerateCode(char *p)
             ErrorMsg("8 bit address/value out of range\n");
             exit(1);
          }
-         Put(pc+ibi++,v,p);
+         PutByte(pc+ibi,v);
       }
-
-      for (i=0 ; i < nops ; ++i) Put(pc+ibi++,0x12,p); // NOP
 
       if (ListOn)
       {
          PrintPC();
          PrintOC(v);
          fprintf(lf," %s",Line);
-         if (Hint[0])
-         {
-            fprintf(lf,"%s",Hint);
-            Hint[0] = 0;
-         }
-
-         if (nops && df) fprintf(df,"Added %d NOP's\n",nops);
-         if (nops >  1 && lf) fprintf(lf," ; added %d NOP's",nops);
-         if (nops == 1 && lf) fprintf(lf," ; added a NOP");
       }
    }
 
@@ -4194,7 +4127,7 @@ char *GenerateCode(char *p)
 
    if (pc+il > 0xffff)
    {
-      if (Phase > 1)
+      if (!Pass)
       {
          ++ErrNum;
          ErrorMsg("Program counter exceeds 64 KB\n");
@@ -4398,26 +4331,23 @@ void RecordMacro(char *p)
       Macros++;
       if (df) fprintf(df,"finished macro %d\n",Macros);
    }
-   else if (Phase == 2) // List macro
+   else  // Skip macro
    {
-      PrintLiNo();
+      if (!Pass) PrintLiNo();
       ++LiNo;
-      if (ListOn) fprintf(lf,"            %s\n",Line);
+      if (ListOn && !Pass) fprintf(lf,"            %s\n",Line);
       do
       {
          fgets(Line,sizeof(Line),sf);
-         PrintLiNo();
+         if (!Pass)
+         {
+            PrintLiNo();
+            if (ListOn) fprintf(lf,"            %s",Line);
+            if (pf) fprintf(pf,"%s",Line);
+         }
          ++LiNo;
-         if (ListOn) fprintf(lf,"            %s",Line);
-         if (pf) fprintf(pf,"%s",Line);
       } while (!feof(sf) && !StrCaseStr(Line,"ENDM"));
       LiNo-=2;
-   }
-   else if (Phase == 1)
-   {
-      ++ErrNum;
-      ErrorMsg("Duplicate macro [%s]\n",Macro);
-      exit(1);
    }
    if (df) MacroInfo(j);
    ++LiNo;
@@ -4432,7 +4362,7 @@ int ExpandMacro(char *m)
 
    j = MacroIndex(m);
    if (j < 0) return j;
-   if (df) fprintf(df,"\nExpanding [%s] phase %d\n",Mac[j].Name,Phase);
+   if (df) fprintf(df,"\nExpanding [%s] phase %d\n",Mac[j].Name,Pass);
 
    p = NextSymbol(m,Macro);
    p = SkipSpace(p);
@@ -4454,7 +4384,7 @@ int ExpandMacro(char *m)
    if (df) fprintf(df,"Macro Level:%d\n",MacLev);
    if (df) fprintf(df,"Macro Body :<<<%s>>>\n",Mac[j].Body);
 
-   if (Phase == 2)
+   if (!Pass)
    {
       Mac[j].Cola = m - Line;
       PrintLine();
@@ -4513,28 +4443,28 @@ void ParseLine(char *cp)
    cp = SkipHexCode(cp);        // Skip disassembly
    cp = SkipSpace(cp);          // Skip leading blanks
    start = cp;                  // Remember start of line
-   if (df) fprintf(df,"%5d %4.4x Parse[%d]:%s\n",LiNo,pc&0xffff,Phase,cp);
+   if (df && *cp) fprintf(df,"%5d %4.4x Parse[%d]:%s\n",LiNo,pc&0xffff,Pass,cp);
    if (CheckCondition(cp)) return;
    if (Skipping)
    {
       PrintLiNo();
-      if (ListOn && Phase == 2) fprintf(lf,"SKIP          %s\n",Line);
+      if (ListOn && !Pass) fprintf(lf,"SKIP          %s\n",Line);
       if (df)         fprintf(df,"%5d SKIP          %s\n",LiNo,Line);
       return;
    }
-   if (pf && Phase == 2 && !MacLev)
+   if (pf && !Pass && !MacLev)
    {
        fprintf(pf,"%s\n",Line); // write to preprocessed file
    }
    if (strncmp(cp,"/*",2) == 0 || strncmp(cp,"\\*",2) == 0) // SDDRIVE comment style
    {
       CodeStyle = 1;
-      if (Phase == 2) PrintLine();
+      if (!Pass) PrintLine();
       return;
    }
    if (*cp == 0)  // Empty
    {
-      if (Phase == 2)
+      if (!Pass)
       {
           PrintLiNo();
           fputc('\n',lf);
@@ -4573,7 +4503,7 @@ void ParseLine(char *cp)
       l = strlen(cp);
       i = 0;
       while (*cp++ == '+' && i < 10 && i < l) ++i;
-      if (Phase == 1)
+      if (Pass)
       {
          plulab[i][plucnt[i]] = pc;
          if (++plucnt[i] > PLUMAX-2)
@@ -4599,14 +4529,12 @@ void ParseLine(char *cp)
          m = ExpandMacro(cp);
          if (m < 0) // not a macro
          {
-            if (df) fprintf(df,"LABEL:%s:\n",cp);
-            if (df) fprintf(df,"start:%s:\n",start);
-            if (cp == start) cp = DefineLabel(cp,&v,0,' ');
+            if (cp == start) cp = DefineLabel(cp,&v,' ');
             else
             {
                if (StrKey(cp,"SET") || StrKey(cp,"ENUM") ||
                    StrKey(cp,"EQU") || strchr(cp,'='))
-                  cp = DefineLabel(cp,&v,0,'C');
+                  cp = DefineLabel(cp,&v,'C');
             }
             cp = SkipSpace(cp);         // Skip leading blanks
             if (*cp) m = ExpandMacro(cp);   // Macro after label
@@ -4616,7 +4544,7 @@ void ParseLine(char *cp)
          if (m < 0 && (*cp == 0 || *cp == ';')) // no code or data
          {
             PrintLiNo();
-            if (ListOn && Phase == 2)
+            if (ListOn && !Pass)
                fprintf(lf,"%4.4x              %s\n",v&0xffff,Line);
             return;
          }
@@ -4636,7 +4564,7 @@ void ParseLine(char *cp)
       cp += strlen(cp);
       GenerateCode(OpText);
    }
-   if (ListOn && Phase == 2) fprintf(lf,"\n");
+   if (ListOn && !Pass) fprintf(lf,"\n");
    if (*cp == 0 || *cp == ';' || *cp == '*') return; // end of code
 
    printf("<%s>\n",cp);
@@ -4650,7 +4578,6 @@ void Phase1Listing(void)
 {
    fprintf(df,"%5d %4.4x",LiNo,pc);
    if (Label[0]) fprintf(df,"  Label:[%s]{%4.4x}",Label,lab[LabelIndex(Label)].Address);
-   if (OpText[0]) fprintf(df,"  %s",OpText);
    if (Comment[0]) fprintf(df,"  %s",Comment);
    fprintf(df,"\n");
 }
@@ -4661,7 +4588,7 @@ int CloseInclude(void)
    const char *msg = "Close INCLUDE file";
 
    PrintLiNo();
-   if (Phase == 2)
+   if (!Pass)
    {
       if (ListOn) fprintf(lf,";                       closed INCLUDE file %s\n",
             IncludeStack[IncludeLevel].Src);
@@ -4678,12 +4605,13 @@ int CloseInclude(void)
 
 void Phase1(void)
 {
-    int i,l,Eof;
+   int i,l,Eof;
 
-   Phase = 1;
    ForcedEnd = 0;
+   Changes   = 0;
    for (i=0 ; i < 11 ; ++i) minlab[i] = UNDEF;
 
+   rewind(sf);
    fgets(Line,sizeof(Line),sf);
    Eof = feof(sf);
    while (!Eof || IncludeLevel > 0)
@@ -4712,7 +4640,6 @@ void Phase2(void)
 {
    int i,l,Eof;
 
-   Phase     =    2;
    pc        =   -1;
    EnumValue =   -1;
    ForcedEnd =    0;
@@ -4776,6 +4703,8 @@ void ListSymbols(FILE *lf, int n, int lb, int ub)
    if (lab[i].Address >= lb && lab[i].Address <= ub)
    {
       fprintf(lf,"%-30.30s $%4.4x",lab[i].Name,lab[i].Address);
+      if (lab[i].Locked) fprintf(lf," L");
+      else               fprintf(lf,"  ");
       for (j=0 ; j <= lab[i].NumRef ; ++j)
       {
          if (j > 0 && (j % 5) == 0)
@@ -5038,7 +4967,7 @@ int main(int argc, char *argv[])
       else if (!strcmp(argv[ic],"-y")) Symbols    = 1;
       else if (!strcmp(argv[ic],"-p")) Preprocess = 1;
       else if (!strcmp(argv[ic],"-q")) Quiet      = 1;
-      else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,1,'D');
+      else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,'D');
       else if (!strncmp(argv[ic],"-l",2))
       {
          if (++ic == argc)
@@ -5097,21 +5026,19 @@ int main(int argc, char *argv[])
 
    memmove(Pre,Src,l);
    memmove(Lst,Src,l);
-   memmove(Opt,Src,l);
    memmove(Sym,Src,l);
 
    // add extensions
 
    memmove(Pre+l,".pp" ,3);
    memmove(Lst+l,".ls9",4);
-   memmove(Opt+l,".opt",4);
    memmove(Sym+l,".sym",4);
 
    if (!Quiet)
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 27-Feb-2025         *\n");
+      printf("* Bit Shift Assembler 13-Apr-2025         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
@@ -5129,10 +5056,16 @@ int main(int argc, char *argv[])
                    lf = AssertFileOp(fopen(Lst,"w"), "Open list file");
    if (Debug)      df = AssertFileOp(fopen("Debug.lst","w"), "Open Debug file");
    if (Preprocess) pf = AssertFileOp(fopen(Pre,"w"), "Open preprocessor file");
-   if (Optimize)   of = AssertFileOp(fopen(Opt,"w"), "Open hint file");
    if (Symbols)    yf = AssertFileOp(fopen(Sym,"w"), "Open symbol file");
 
-   Phase1();
+   for (Pass = 1 ; Pass <= MaxPass ; ++Pass)
+   {
+      Phase1();
+      if (Pass == 1) printf("* Pass 1: %5d Unresolved branches       *\n",Unresolved);
+      else           printf("* Pass%2d: %5d Labels changed            *\n",Pass,Changes);
+      if (Pass > 1 && Changes == 0) break;
+   }
+   Pass = 0;
    Phase2();
    WriteBinaries();
    ListUndefinedSymbols();
@@ -5148,12 +5081,6 @@ int main(int argc, char *argv[])
    if (fclose(lf)) AssertFileOp(NULL, "Close list file");
    if (yf) if (fclose(yf)) AssertFileOp(NULL, "Close symbol file");
    if (df) if (fclose(df)) AssertFileOp(NULL, "Close debug file");
-   if (Optimize)
-   {
-      if (fclose(of)) AssertFileOp(NULL, "Close hint file");
-      if (optc == 0) remove(Opt);
-      if (optc && !Quiet) printf("* Opt   : %-31.31s *\n",Opt);
-   }
    if (!Quiet)
    {
       printf("* -d:%s  -i:%s  -n:%s  -o:%s  -x:%s  *\n",
@@ -5165,8 +5092,6 @@ int main(int argc, char *argv[])
       printf("* Macros      : %6d                    *\n",Macros);
       if (Preset)
       printf("* Preset      : %6d                    *\n",Preset);
-      if (optc)
-      printf("* Hints       : %6d for optimization   *\n",optc);
       printf("*******************************************\n");
    }
    if (ErrNum)
