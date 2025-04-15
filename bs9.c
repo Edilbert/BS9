@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 13-Apr-2025
+Version: 15-Apr-2025
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -734,6 +734,8 @@ struct MatStruct
 //   6309      0       1      2      3      4      5      6      7
 //   Mnem    CPU   Inher    Reg   Rela    Imm Direct    Ind    Ext
 // ---------------------------------------------------------------
+   {"CLRX"    ,{2,0x1200,    -1,    -1,    -1,    -1,    -1,    -1}},
+   {"CLRY"    ,{2,0x1201,    -1,    -1,    -1,    -1,    -1,    -1}},
    {"DECX"    ,{2,0x301F,    -1,    -1,    -1,    -1,    -1,    -1}},
    {"DECY"    ,{2,0x313F,    -1,    -1,    -1,    -1,    -1,    -1}},
    {"INCX"    ,{2,0x3001,    -1,    -1,    -1,    -1,    -1,    -1}},
@@ -3585,6 +3587,22 @@ char *GenerateCode(char *p)
    {
       ol = il = 1 + (oc > 255); // instruction length
       ql = 0;
+      if (oc == 0x1200)         // CLRX
+      {
+         oc = 0x8e;             // LDX #0
+         v  =    0;
+         ol =    1;
+         ql =    2;
+         il =    3;
+      }
+      if (oc == 0x1201)         // CLRY
+      {
+         oc = 0x1032;
+         v  =   0x22;
+         ol =      2;
+         ql =      1;
+         il =      3;
+      }
       p += strlen(p) ;          // ignore rest
    }
 
@@ -5038,7 +5056,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 13-Apr-2025         *\n");
+      printf("* Bit Shift Assembler 15-Apr-2025         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
