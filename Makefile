@@ -15,10 +15,10 @@ endif
 all: $(EXE) $(EXE2)
 
 $(EXE):	bs9.c
-	$(CC) -Wall -Wextra -pedantic -std=c99 $< -o $@ -lm -g
+	$(CC) -Wall -Wextra -pedantic -std=c99 -O2 $< -o $@ -lm -g
 
 $(EXE2): form9.c
-	$(CC) -Wall -Wextra -pedantic -std=c99 $< -o $@ -g
+	$(CC) -Wall -Wextra -pedantic -std=c99 -O2 $< -o $@ -g
 
 install:
 	install $(EXE) $(PREFIX)/bin
