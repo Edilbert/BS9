@@ -5079,8 +5079,11 @@ int main(int argc, char *argv[])
    for (Pass = 1 ; Pass <= MaxPass ; ++Pass)
    {
       Phase1();
-      if (Pass == 1) printf("* Pass 1: %5d Unresolved branches       *\n",Unresolved);
-      else           printf("* Pass%2d: %5d Labels changed            *\n",Pass,Changes);
+      if (!Quiet)
+      {
+         if (Pass == 1) printf("* Pass 1: %5d Unresolved branches       *\n",Unresolved);
+         else           printf("* Pass%2d: %5d Labels changed            *\n",Pass,Changes);
+      }
       if (Pass > 1 && Changes == 0) break;
    }
    Pass = 0;
