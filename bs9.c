@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 15-Apr-2025
+Version: 21-Apr-2025
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -845,6 +845,7 @@ char *Src;           // source file
 char  Lst[FNSIZE];   // list file
 char  Pre[FNSIZE];   // preprocessed file
 char  Sym[FNSIZE];   // symbols
+char  Ipa[FNSIZE];   // include path
 
 int GenStart = 0x10000 ; //  Lowest assemble address
 int GenEnd   =       0 ; // Highest assemble address
@@ -2349,6 +2350,7 @@ char *ListSizeInfo(char *p)
 
 char *IncludeFile(char *p)
 {
+   size_t l,f;;
    char FileName[256];
    char *fp;
    p = NeedChar(p,'"');
@@ -2370,8 +2372,19 @@ char *IncludeFile(char *p)
    sf = fopen(FileName,"r");
    if (!sf)
    {
-      printf("Could not open include file <%s>\n",FileName);
-      exit(1);
+      f = strlen(FileName);
+      l = strlen(Ipa);
+      if (l)
+      {
+         memmove(FileName+l,FileName,f+1);
+         memmove(FileName,Ipa,l);
+         sf = fopen(FileName,"r");
+      }
+      if (!sf)
+      {
+         printf("Could not open include file <%s>\n",FileName);
+         exit(1);
+      }
    }
    IncludeStack[IncludeLevel].LiNo = LiNo;
    IncludeStack[++IncludeLevel].fp = sf;
@@ -4951,6 +4964,7 @@ void usage(void)
    printf("   -d print details in file <Debug.lst>\n");
    printf("   -D Define symbols\n");
    printf("   -i ignore case in symbols\n");
+   printf("   -I include path\n");
    printf("   -h display this usage\n");
    printf("   -l preset value for memory\n");
    printf("   -m Motorola codestyle: blank = field separator\n");
@@ -4960,6 +4974,12 @@ void usage(void)
    printf("   -q quiet mode\n");
    printf("   -x assemble listing file - skip hex in front\n");
    exit(1);
+}
+
+void DefineIncludePath(char *path)
+{
+   strcpy(Ipa,path);
+   if (Ipa[strlen(Ipa)-1] != '/') strcat(Ipa,"/");
 }
 
 int main(int argc, char *argv[])
@@ -4985,6 +5005,7 @@ int main(int argc, char *argv[])
       else if (!strcmp(argv[ic],"-y")) Symbols    = 1;
       else if (!strcmp(argv[ic],"-p")) Preprocess = 1;
       else if (!strcmp(argv[ic],"-q")) Quiet      = 1;
+      else if (!strncmp(argv[ic],"-I",2)) DefineIncludePath(argv[++ic]);
       else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,'D');
       else if (!strncmp(argv[ic],"-l",2))
       {
@@ -5056,11 +5077,12 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 15-Apr-2025         *\n");
+      printf("* Bit Shift Assembler 21-Apr-2025         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
       printf("* List  : %-31.31s *\n",Lst);
+      if (Ipa[0]) printf("* Incl. : %-31.31s *\n",Ipa);
    }
 
    sf = fopen(Src,"r");
