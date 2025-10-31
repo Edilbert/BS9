@@ -484,6 +484,7 @@ enum Addressing_Mode
 // Opcodes used in branch & jump optmisation
 
 #define OP_LBRA    0x16
+#define OP_LBSR    0x17
 #define OP_BRA     0x20
 #define OP_BHI     0x22
 #define OP_LBHI  0x1022
@@ -3712,6 +3713,7 @@ char *GenerateCode(char *p)
    // relative address mode
 
    // BRA[20] : LBRA[16]
+   // BSR[8D] : LBSR[17]
    // BHI[22] : LBHI[1022]
    // BLE[2F] : LBLE[102F]
 
@@ -3720,7 +3722,8 @@ char *GenerateCode(char *p)
       // make all branches short by default
 
       if (oc >= OP_LBHI && oc <= OP_LBLE) oc &= 0xff;
-      if (oc == 0x16) oc = 0x20; // LBRA -> BRA
+      if (oc == OP_LBRA) oc = OP_BRA; // LBRA -> BRA
+      if (oc == OP_LBSR) oc = OP_BSR; // LBSR -> BSR
       ol = 1;
       ql = 1;
       il = 2;
@@ -3771,6 +3774,13 @@ char *GenerateCode(char *p)
          if (oc == OP_BRA)
          {
             oc = OP_LBRA;
+            ol = 1;
+            ql = 2;
+            il = 3;
+         }
+         else if (oc == OP_BSR)
+         {
+            oc = OP_LBSR;
             ol = 1;
             ql = 2;
             il = 3;
