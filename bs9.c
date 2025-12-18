@@ -1550,13 +1550,6 @@ char *DefineLabel(char *p, int *val, char Type)
       {
          *val = ++EnumValue;
          if (lab[j].Address == UNDEF) lab[j].Address = *val;
-         else if (lab[j].Address != *val)
-         {
-            ++ErrNum;
-            ErrorLine(p);
-            ErrorMsg("ENUM phase error\n");
-            exit(1);
-         }
       }
       else
       {
