@@ -1549,7 +1549,7 @@ char *DefineLabel(char *p, int *val, char Type)
       else if (LabDef[i].Type > 0) // ENUM
       {
          *val = ++EnumValue;
-         if (lab[j].Address == UNDEF) lab[j].Address = *val;
+         lab[j].Address = *val;
       }
       else
       {
