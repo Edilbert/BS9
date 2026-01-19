@@ -3871,6 +3871,7 @@ char *GenerateCode(char *p)
          exit(1);
       }
       oc = Mat[MneIndex].Opc[AM_Indexed];
+      ol = 1 + (oc > 255);
       if (oc < 0)
       {
          ++ErrNum;
@@ -3884,6 +3885,7 @@ char *GenerateCode(char *p)
          pb = 0x9f;
          ql = 2;
          il = ol + 3;
+         if (df) fprintf(df,"Indirect oc=%4.4x ol=%d ql=%d il=%d\n",oc,ol,ql,il);
       }
       else
       {
