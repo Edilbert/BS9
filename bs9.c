@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 21-Apr-2025
+Version: 13-Mar-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -4765,7 +4765,8 @@ void PrintSymbols(void)
    for (i=0 ; i < Labels; ++i)
    {
       if (lab[i].Type == 0) lab[i].Type = ' ';
-      fprintf(yf,"%c %4.4x %s\n",lab[i].Type,lab[i].Address,lab[i].Name);
+      fprintf(yf,"%c %4.4x %s\n",lab[i].Type,
+              lab[i].Address&0xffff,lab[i].Name);
    }
 }
 
@@ -5082,7 +5083,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 21-Apr-2025         *\n");
+      printf("* Bit Shift Assembler 13-Mar-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
