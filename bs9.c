@@ -4759,9 +4759,15 @@ void ListSymbols(FILE *lf, int n, int lb, int ub)
 
 void PrintSymbols(void)
 {
-   int i;
+   int i,cs;
 
+   cs = 0;
+   for (i=0x8000 ; i < 0x10000 ; ++i) cs += ROM[i];
    fprintf(yf,"%5d\n",Labels);
+
+   fprintf(yf,"%c %4.4x %s\n",'C',
+              cs & 0xffff,"Checksum");
+
    for (i=0 ; i < Labels; ++i)
    {
       if (lab[i].Type == 0) lab[i].Type = ' ';
