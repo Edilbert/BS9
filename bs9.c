@@ -3024,8 +3024,10 @@ struct PseudoStruct PseudoTab[] =
    {"ENDSUB"    , &ps_endsub },
    {"EXTERN"    , &ps_ignore },
    {"FCB"       , &ps_byte   },
+   {"DB"        , &ps_byte   }, // alias to FCB
    {"FCC"       , &ps_string },
    {"FDB"       , &ps_word   },
+   {"DW"        , &ps_word   }, // alias to FDB
    {"FILL"      , &ps_fill   },
    {"FORMLN"    , &ps_formln },
    {"INCLUDE"   , &ps_include},
@@ -3037,6 +3039,7 @@ struct PseudoStruct PseudoTab[] =
    {"MODULE"    , &ps_subr   }, // alias to SUBROUTINE
    {"ORG"       , &ps_org    },
    {"RMB"       , &ps_rmb    },
+   {"DS"        , &ps_rmb    }, // alias to RMB
    {"REAL"      , &ps_real   },
    {"SECT"      , &ps_sect   },
    {"SETDP"     , &ps_setdp  },
