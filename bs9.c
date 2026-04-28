@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 14-Apr-2026
+Version: 28-Apr-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -798,7 +798,7 @@ int EnumValue  = -1; // last used ENUM value
 int MacLev;          // macro nesting level
 int MacList    =  1; // macro listing option
 int ModuleStart;     // address of a module
-int Optimize;        // branch and jump omtimization
+int Optimize   =  1; // branch and jump omtimization
 int Symbols    =  1; // write symbols to file
 int FormLn;          // lines per page [inactive]
 int DP;              // current direct page
@@ -3715,14 +3715,17 @@ char *GenerateCode(char *p)
 
    else if ((oc = Mat[MneIndex].Opc[AM_Relative]) >= 0)
    {
-      // make all branches short by default
+      // make all branches short for Optimize
 
-      if (oc >= OP_LBHI && oc <= OP_LBLE) oc &= 0xff;
-      if (oc == OP_LBRA) oc = OP_BRA; // LBRA -> BRA
-      if (oc == OP_LBSR) oc = OP_BSR; // LBSR -> BSR
-      ol = 1;
-      ql = 1;
-      il = 2;
+      if (Optimize)
+      {
+         if (oc >= OP_LBHI && oc <= OP_LBLE) oc &= 0xff;
+         if (oc == OP_LBRA) oc = OP_BRA; // LBRA -> BRA
+         if (oc == OP_LBSR) oc = OP_BSR; // LBSR -> BSR
+         ol = 1;
+         ql = 1;
+         il = 2;
+      }
 
       if (OpText[0] == '-') // local backward label
       {
@@ -4047,33 +4050,36 @@ char *GenerateCode(char *p)
             }
          }
 
-         // replace short JMP with BRA
-
-         if (oc == OP_JMP_E && v != UNDEF)
+         if (Optimize)
          {
-            relv = v - pc - 2;
-            if (relv >= -128 && relv <= 127) // short branch
+            // replace short JMP with BRA
+
+            if (oc == OP_JMP_E && v != UNDEF)
             {
-               oc = OP_BRA;
-               ol = 1;
-               ql = 1;
-               il = 2;
-               v = relv & 0xff;;
+               relv = v - pc - 2;
+               if (relv >= -128 && relv <= 127) // short branch
+               {
+                  oc = OP_BRA;
+                  ol = 1;
+                  ql = 1;
+                  il = 2;
+                  v = relv & 0xff;;
+               }
             }
-         }
 
-         // replace short JSR with BSR
+            // replace short JSR with BSR
 
-         if (oc == OP_JSR_E && v != UNDEF)
-         {
-            relv = v - pc - 2;
-            if (relv >= -128 && relv <= 127) // short branch
+            if (oc == OP_JSR_E && v != UNDEF)
             {
-               oc = OP_BSR;
-               ol = 1;
-               ql = 1;
-               il = 2;
-               v = relv & 0xff;;
+               relv = v - pc - 2;
+               if (relv >= -128 && relv <= 127) // short branch
+               {
+                  oc = OP_BSR;
+                  ol = 1;
+                  ql = 1;
+                  il = 2;
+                  v = relv & 0xff;;
+               }
             }
          }
 
@@ -5016,7 +5022,7 @@ int main(int argc, char *argv[])
       else if (!strcmp(argv[ic],"-i")) IgnoreCase = 1;
       else if (!strcmp(argv[ic],"-m")) CodeStyle  = 1;
       else if (!strcmp(argv[ic],"-n")) WithLiNo   = 1;
-      else if (!strcmp(argv[ic],"-o")) Optimize   = 1;
+      else if (!strcmp(argv[ic],"-o")) Optimize   = 0;
       else if (!strcmp(argv[ic],"-y")) Symbols    = 1;
       else if (!strcmp(argv[ic],"-p")) Preprocess = 1;
       else if (!strcmp(argv[ic],"-q")) Quiet      = 1;
@@ -5092,7 +5098,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 14-Apr-2026         *\n");
+      printf("* Bit Shift Assembler 28-Apr-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
