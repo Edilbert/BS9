@@ -4990,7 +4990,7 @@ void usage(void)
    printf("   -l preset value for memory\n");
    printf("   -m Motorola codestyle: blank = field separator\n");
    printf("   -n include line numbers in listing\n");
-   printf("   -o optimize long branches and jumps\n");
+   printf("   -o do NOT optimize long branches and jumps\n");
    printf("   -p print preprocessed source\n");
    printf("   -q quiet mode\n");
    printf("   -x assemble listing file - skip hex in front\n");
