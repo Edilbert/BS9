@@ -1848,7 +1848,7 @@ char *EvalCharValue(char *p, int *v)
    // printf("%s %d %c\n",p,strncmp(p,"'\\'",3),p[3]);
    if (p[0]=='\\' && p[1]=='\'' && p[3]!='\'')
    {
-      *v = '\\';
+      *v = 0x27; // apostrophe
       p+=2;
    }
 
@@ -2728,7 +2728,7 @@ char *ParseByteData(char *p)
          l += strlen(datebuffer);
          p += 5;
       }
-      else if (Delimiter == '"' || Delimiter == '\'')
+      else if (Delimiter == '"') //  || Delimiter == '\'')
       {
          i = l; // remember start of string
          p = ParseASCII(p,ByteBuffer,&l);
@@ -3782,14 +3782,14 @@ char *GenerateCode(char *p)
 
       if (relv != UNDEF && (relv < -128 || relv > 127)) // long branch
       {
-         if (oc == OP_BRA)
+         if (oc == OP_BRA || oc == OP_LBRA)
          {
             oc = OP_LBRA;
             ol = 1;
             ql = 2;
             il = 3;
          }
-         else if (oc == OP_BSR)
+         else if (oc == OP_BSR || oc == OP_LBSR)
          {
             oc = OP_LBSR;
             ol = 1;
@@ -3798,7 +3798,7 @@ char *GenerateCode(char *p)
          }
          else
          {
-            oc += 0x1000; // long branch
+            if (oc < 256) oc += 0x1000; // long branch
             ol = 2;
             ql = 2;
             il = 4;
