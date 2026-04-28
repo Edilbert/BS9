@@ -3715,16 +3715,28 @@ char *GenerateCode(char *p)
 
    else if ((oc = Mat[MneIndex].Opc[AM_Relative]) >= 0)
    {
-      // make all branches short for Optimize
+      // Default short branch
+      ol = 1;
+      ql = 1;
+      il = 2;
 
-      if (Optimize)
+      if (Optimize) // make all branches short for Optimize
       {
          if (oc >= OP_LBHI && oc <= OP_LBLE) oc &= 0xff;
          if (oc == OP_LBRA) oc = OP_BRA; // LBRA -> BRA
          if (oc == OP_LBSR) oc = OP_BSR; // LBSR -> BSR
+      }
+      else if (oc >= OP_LBHI  &&  oc <= OP_LBLE)
+      {
+         ol = 2;
+         ql = 2;
+         il = 4;
+      }
+      else if (oc == OP_LBRA || oc == OP_LBSR)
+      {
          ol = 1;
-         ql = 1;
-         il = 2;
+         ql = 2;
+         il = 3;
       }
 
       if (OpText[0] == '-') // local backward label
