@@ -24,6 +24,11 @@ install:
 	install $(EXE) $(PREFIX)/bin
 	install $(EXE2) $(PREFIX)/bin
 
+# Run "make syntax" as standard user to install VIM syntax file
+syntax:
+	mkdir -p ~/.vim/syntax
+	cp 6809.vim ~/.vim/syntax
+
 clean:
 	rm -f $(EXE) $(EXE2)
 
