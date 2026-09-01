@@ -2061,7 +2061,7 @@ char *EvalOperand(char *p, int *v, int prio)
           break;
       }
    }
-   else if (ForcedHex && isxdigit(*p)) p = EvalHexValue(p,v);
+   else if (ForcedHex && isxdigit(*p)) p = EvalHexValue(p,&r);
    else if (isdigit(c)) p = EvalDecValue(p,&r);    // decimal constant
    else if (isym(c))    p = EvalSymValue(p,&r);    // symbol or label
    else
