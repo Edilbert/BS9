@@ -804,6 +804,7 @@ int FormLn;          // lines per page [inactive]
 int DP;              // current direct page
 int CodeStyle;       // 1: operand has no spaces (old form)
 int MneIndex;        // current mnemonic
+int ForcedHex  =  0; // used for BHEX pseudo
 
 #define MAXPASS 10
 int BOC[MAXPASS];    // branch opt count
@@ -2060,6 +2061,7 @@ char *EvalOperand(char *p, int *v, int prio)
           break;
       }
    }
+   else if (ForcedHex && isxdigit(*p)) p = EvalHexValue(p,v);
    else if (isdigit(c)) p = EvalDecValue(p,&r);    // decimal constant
    else if (isym(c))    p = EvalSymValue(p,&r);    // symbol or label
    else
@@ -2796,6 +2798,7 @@ char *ParseByteData(char *p)
       }
    }
    pc += l;
+   ForcedHex = 0;
    return p;
 }
 
@@ -2918,6 +2921,7 @@ char *ps_store(char *p)  {            return ParseStoreData(p); }
 char *ps_string(char *p) { PrintPC(); return ParseByteData(p); }
 char *ps_subr(char *p)   { PrintPC(); return ParseSubroutine(p); }
 char *ps_word(char *p)   { PrintPC(); return ParseWordData(p); }
+char *ps_bhex(char *p)   { PrintPC(); ForcedHex=1; return ParseByteData(p); }
 
 char *ps_align(char *p)
 {
@@ -3055,7 +3059,8 @@ struct PseudoStruct PseudoTab[] =
    {"STORE"     , &ps_store  },
    {"SUBROUTINE", &ps_subr   },
    {"TTL"       , &ps_ignore },
-   {"WORD"      , &ps_word   }
+   {"WORD"      , &ps_word   },
+   {"BHEX"      , &ps_bhex   }  // force hex numerics
 };
 
 #define PSEUDOS (int)(sizeof(PseudoTab) / sizeof(struct PseudoStruct))
