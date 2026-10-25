@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 16-Sep-2026
+Version: 25-Oct-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -327,12 +327,19 @@ For example:
 #include <math.h>
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <time.h>
 #include <math.h>
 
 #ifndef M_PI
     #define M_PI 3.14159265358979323846
 #endif
+
+#define BYTEMIN (-128)
+#define BYTEMAX ( 255)
+#define WORDMIN (-32768)
+#define WORDMAX ( 65535)
+
 int CPU = 6309; // default: Hitachi 6309
 
 #define MAX_STR 1024
@@ -360,6 +367,7 @@ FILE *yf; // symbols      file
 void AddLabel(char *p);
 void ErrorLine(char *p);
 void ErrorMsg(const char *format, ...);
+void ErrorExit(const char *msg, char *ptr);
 char *ExtractOpText(char *);
 char *EvalOperand(char *, int *, int);
 char *ExtractValue(char *, int *);
@@ -807,7 +815,6 @@ int MneIndex;        // current mnemonic
 int ForcedHex  =  0; // used for BHEX pseudo
 
 #define MAXPASS 10
-int BOC[MAXPASS];    // branch opt count
 int MaxPass=MAXPASS;
 int Pass;            // pass counter
 int Changes;         // label address changes
@@ -931,24 +938,6 @@ struct MacroStruct
 
 char *MacPtr[MAXMAC]; // pointer inside macro body
 int Macros;           // total number of macros
-
-char Cstat[26];
-
-// *******
-// MneStat
-// *******
-
-void MneStat(void)
-{
-   unsigned int i,j;
-
-   for (i=0 ; i < DIMOP_6309 ; ++i)
-   for (j=0 ; j < strlen(Mat[i].Mne) ; ++j)
-      ++Cstat[Mat[i].Mne[j]-'A'];
-
-   for (i=0 ; i < 26 ; ++i)
-      printf("%c:%3d\n",'A'+i,Cstat[i]);
-}
 
 // *********
 // SkipSpace
@@ -1112,6 +1101,10 @@ int strcmpword(const char *s1, const char *s2)
    return r;
 }
 
+// ***********
+// SkipHexCode
+// ***********
+
 char *SkipHexCode(char *p)
 {
    int l;
@@ -1181,6 +1174,13 @@ void ErrorMsg(const char *format, ...) {
    free(buf);
 }
 
+void ErrorExit(const char *msg, char *ptr)
+{
+   ++ErrNum;
+   ErrorMsg(msg);
+   if (ptr) ErrorLine(ptr);
+   exit(1);
+}
 
 // *********
 // PrintLiNo
@@ -1315,19 +1315,12 @@ char *NeedChar(char *p, char c)
    return NULL;
 }
 
-
-
 char *ParseCaseData(char *p)
 {
    p = SkipSpace(p);
         if (*p == '+') IgnoreCase = 0;
    else if (*p == '-') IgnoreCase = 1;
-   else
-   {
-      ++ErrNum;
-      ErrorMsg("Missing '+' or '-' after CASE\n");
-      exit(1);
-   }
+   else ErrorExit("Missing '+' or '-' after CASE\n",p);
    PrintLine();
    return p+1;
 }
@@ -1337,12 +1330,7 @@ char *ParseListOption(char *p)
    p = SkipSpace(p);
         if (*p == '+') ListGlobal = 1;
    else if (*p == '-') ListGlobal = 0;
-   else
-   {
-      ++ErrNum;
-      ErrorMsg("Missing '+' or '-' after LIST\n");
-      exit(1);
-   }
+   else ErrorExit("Missing '+' or '-' after LIST\n",p);
    ListOn = ListGlobal;
    PrintLine();
    return p+1;
@@ -1351,12 +1339,7 @@ char *ParseListOption(char *p)
 char *SetBSS(char *p)
 {
    p = NeedChar(p,'=');
-   if (!p)
-   {
-      ++ErrNum;
-      ErrorMsg("Missing '=' in set BSS & instruction\n");
-      exit(1);
-   }
+   if (!p) ErrorExit("Missing '=' in set BSS & instruction\n",p);
    p = ExtractValue(p+1,&bss);
    if (ListOn && !Pass)
    {
@@ -1486,12 +1469,7 @@ char *DefineLabel(char *p, int *val, char Type)
 
    *val = UNDEF; // preset
 
-   if (Labels > MAXLAB -2)
-   {
-      ++ErrNum;
-      ErrorMsg("Too many labels (> %d)\n",MAXLAB);
-      exit(1);
-   }
+   if (Labels > MAXLAB -2) ErrorExit("Too many labels\n",p);
    p = GetSymbol(p,Label);
    if (*p == ':') ++p; // Ignore colon after label
    l = strlen(Label);
@@ -1527,12 +1505,7 @@ char *DefineLabel(char *p, int *val, char Type)
       {
          p += strlen(p);
          rop = EvalOperand(OpText,&v,0);
-         if (*rop)
-         {
-            ErrorLine(rop);
-            ErrorMsg("Extra text after label assignment\n");
-            exit(1);
-         }
+         if (*rop) ErrorExit("Extra text after label assignment\n",rop);
          if (lab[j].Address == UNDEF || LabDef[i].Type == 0)
              lab[j].Address = v;
          else if (lab[j].Address != v && !lab[j].Locked)
@@ -1552,13 +1525,7 @@ char *DefineLabel(char *p, int *val, char Type)
          *val = ++EnumValue;
          lab[j].Address = *val;
       }
-      else
-      {
-         ++ErrNum;
-         ErrorLine(p);
-         ErrorMsg("Missing operand\n");
-         exit(1);
-      }
+      else ErrorExit("Missing operand\n",p);
       if (df) fprintf(df,"Define:%s=%4.4X\n",lab[j].Name,lab[j].Address);
    }
    else if (!strcmpword(p,"BSS"))
@@ -1831,12 +1798,10 @@ char *EvalDecValue(char *p, int *v)
    while (isdigit(*p)) ++p;
    if (!isalpha(*p)) return p;
    if ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f'))
-      ErrorMsg("Wrong decimal constant or leading $ for hex missing\n");
+      ErrorExit("Wrong decimal constant or leading $ for hex missing\n",p);
    else
-      ErrorMsg("Illegal character in decimal constant\n");
-   ++ErrNum;
-   ErrorLine(p);
-   exit(1);
+      ErrorExit("Illegal character in decimal constant\n",p);
+   return p;
 }
 
 
@@ -1867,11 +1832,7 @@ char *EvalCharValue(char *p, int *v)
    else *v = *p++;
 
    if (*p != '\'' && *p != 0)
-   {
-      ++ErrNum;
-      ErrorMsg("Missing ' delimiter after character operand\n");
-      exit(1);
-   }
+      ErrorExit("Missing ' delimiter after character operand\n",p);
    if (*p) ++p;
    return p;
 }
@@ -1887,7 +1848,7 @@ char *EvalMultiCharValue(char *p, int *v)
       *v = (*v << 8) | *p++;
    }
    if (*p == '\"') ++p;        // end quote
-   else ErrorMsg("Multi character operand too long ( > 4 )\n");
+   else ErrorExit("Multi character operand too long ( > 4 )\n",p);
    return p;
 }
 
@@ -1930,15 +1891,19 @@ char *op_par(char *p, int *v)
 }
 
 // functions parsing unary operators or constants
+// ==============================================
 
-char *op_plu(char *p, int *v) { p = EvalOperand(p+1,v,12)               ; return p; }
-char *op_min(char *p, int *v) { p = EvalOperand(p+1,v,12);*v = -(*v)    ; return p; }
-char *op_lno(char *p, int *v) { p = EvalOperand(p+1,v,12);*v = !(*v)    ; return p; }
-char *op_bno(char *p, int *v) { p = EvalOperand(p+1,v,12);*v = ~(*v)    ; return p; }
-
-char *op_low(char *p, int *v) { p = EvalOperand(p+1,v,12);ForcedMode=-1 ; return p; }
-char *op_hig(char *p, int *v) { p = EvalOperand(p+1,v,12);ForcedMode= 1 ; return p; }
-
+char *op_plu(char *p, int *v) { p = EvalOperand(p+1,v,12); return p; }
+char *op_min(char *p, int *v) { p = EvalOperand(p+1,v,12);
+                              if (*v != UNDEF) *v = -(*v); return p; }
+char *op_lno(char *p, int *v) { p = EvalOperand(p+1,v,12);
+                              if (*v != UNDEF) *v = !(*v); return p; }
+char *op_bno(char *p, int *v) { p = EvalOperand(p+1,v,12);
+                              if (*v != UNDEF) *v = ~(*v); return p; }
+char *op_low(char *p, int *v) { p = EvalOperand(p+1,v,12);
+                              ForcedMode=-1 ; return p; }
+char *op_hig(char *p, int *v) { p = EvalOperand(p+1,v,12);
+                              ForcedMode= 1 ; return p; }
 char *op_prc(char *p, int *v) { *v = pc ; return p+1;}
 char *op_dac(char *p, int *v) { *v = bss; return p+1;}
 char *op_hex(char *p, int *v) { return EvalHexValue(p+1,v) ;}
@@ -1977,30 +1942,68 @@ struct unaop_struct unaop[] =
 
 #define UNAOPS (int)(sizeof(unaop) / sizeof(struct unaop_struct))
 
-int op_mul(int l, int r) { return l *  r; }
-int op_div(int l, int r) { if (r) return l / r; else return UNDEF; }
-int op_add(int l, int r) { return l +  r; }
-int op_sub(int l, int r) { return l -  r; }
-int op_asl(int l, int r) { return l << r; }
-int op_lsr(int l, int r) { return l >> r; }
-int op_cle(int l, int r) { return l <= r; }
-int op_clt(int l, int r) { return l <  r; }
-int op_cge(int l, int r) { return l >= r; }
-int op_cgt(int l, int r) { return l >  r; }
-int op_ceq(int l, int r) { return l == r; }
-int op_cne(int l, int r) { return l != r; }
-int op_xor(int l, int r) { return l ^  r; }
-int op_and(int l, int r) { return l && r; }
-int op_bnd(int l, int r) { return l &  r; }
-int op_lor(int l, int r) { return l || r; }
-int op_bor(int l, int r) { return l |  r; }
+void ExpressionOverflow(char *p)
+{
+   ErrorExit("Integer expression out of range\n",p);
+}
+
+int op_div(int l, int r, char *p)
+{
+   if (r == 0) ErrorExit("Division by zero\n",p);
+   return l / r;
+}
+
+int op_mul(int l, int r, char *p)
+{
+   long long t = l * r;
+   if (t < INT_MIN || t > INT_MAX) ExpressionOverflow(p);
+   return l * r;
+}
+
+int op_add(int l, int r, char *p)
+{
+   long long t = l + r;
+   if (t < INT_MIN || t > INT_MAX) ExpressionOverflow(p);
+   return l + r;
+}
+
+int op_sub(int l, int r, char *p)
+{
+   long long t = l - r;
+   if (t < INT_MIN || t > INT_MAX) ExpressionOverflow(p);
+   return l - r;
+}
+
+int op_asl(int l, int r, char *p)
+{
+   if (r < 0 || r > 31) ExpressionOverflow(p);
+   return l << r;
+}
+
+int op_lsr(int l, int r, char *p)
+{
+   if (r < 0 || r > 31) ExpressionOverflow(p);
+   return l >> r;
+}
+
+int op_cle(int l, int r, char *p) { (void)p;return l <= r; }
+int op_clt(int l, int r, char *p) { (void)p;return l <  r; }
+int op_cge(int l, int r, char *p) { (void)p;return l >= r; }
+int op_cgt(int l, int r, char *p) { (void)p;return l >  r; }
+int op_ceq(int l, int r, char *p) { (void)p;return l == r; }
+int op_cne(int l, int r, char *p) { (void)p;return l != r; }
+int op_and(int l, int r, char *p) { (void)p;return l && r; }
+int op_lor(int l, int r, char *p) { (void)p;return l || r; }
+int op_xor(int l, int r, char *p) { (void)p;return (int32_t)((uint32_t)l^(uint32_t)r);}
+int op_bnd(int l, int r, char *p) { (void)p;return (int32_t)((uint32_t)l&(uint32_t)r);}
+int op_bor(int l, int r, char *p) { (void)p;return (int32_t)((uint32_t)l|(uint32_t)r);}
 
 
 struct binop_struct
 {
    const char *op;
    int prio;
-   int (*foo)(int,int);
+   int (*foo)(int,int,char *);
 };
 
 #define BINOPS 17
@@ -2064,12 +2067,7 @@ char *EvalOperand(char *p, int *v, int prio)
    else if (ForcedHex && isxdigit(*p)) p = EvalHexValue(p,&r);
    else if (isdigit(c)) p = EvalDecValue(p,&r);    // decimal constant
    else if (isym(c))    p = EvalSymValue(p,&r);    // symbol or label
-   else
-   {
-      ErrorLine(p);
-      ErrorMsg("Illegal operand\n");
-      exit(1);
-   }
+   else ErrorExit("Illegal operand\n",p);
 
    // Left operand has been parsed successfully
    // now look for binary operators
@@ -2106,16 +2104,12 @@ char *EvalOperand(char *p, int *v, int prio)
             }
             p = EvalOperand(p+l,&w,o);
             if (w == UNDEF) r = UNDEF;
-            else r = binop[i].foo(r,w);
+            else r = binop[i].foo(r,w,p);
             break;
          }
       }
       if (i == BINOPS)  // no valid operator
-      {
-         ErrorMsg("Syntax error: binary operator expected\n");
-         ErrorLine(p);
-         exit(1);
-      }
+         ErrorExit("Syntax error: binary operator expected\n",p);
    }
    *v = r;
    if (CodeStyle == 1 && *p == ' ') p += strlen(p);
@@ -2137,19 +2131,9 @@ char *ExtractValue(char *p, int *v)
    char *r; // pointer to trailing text after value (should be none)
 
    p = ExtractOpText(p);        // separate value string from comment
-   if (OpText[0] == 0)
-   {
-      ErrorLine(p);
-      ErrorMsg("Empty operand\n");
-      exit(1);
-   }
+   if (OpText[0] == 0) ErrorExit("Empty operand\n",p);
    r = EvalOperand(OpText,v,0); // evaluate integer value
-   if (*r)                      // check for trailing text
-   {
-      ErrorLine(r);
-      ErrorMsg("Extra text after operand\n");
-      exit(1);
-   }
+   if (*r) ErrorExit("Extra text after operand\n",p);
    return p;                    // points to comment or EOL
 }
 
@@ -2162,20 +2146,10 @@ char *AlignFill(char *p, int *v, int *f)
    char *r; // pointer to text after value
 
    p = ExtractOpText(p);        // separate value string from comment
-   if (OpText[0] == 0)
-   {
-      ErrorLine(p);
-      ErrorMsg("Empty operand\n");
-      exit(1);
-   }
+   if (OpText[0] == 0) ErrorExit("Empty operand\n",p);
    r = EvalOperand(OpText,v,0); // evaluate integer value
    if (*r == 0) return p;       // no fill value specified
-   if (*r != '(')               // check for fill value
-   {
-      ErrorLine(r);
-      ErrorMsg("Illegal syntax for fill value\n");
-      exit(1);
-   }
+   if (*r != '(') ErrorExit("Illegal syntax for fill value\n",p);
    r = EvalOperand(r+1,f,0);    // evaluate fill value
    return p;                    // points to comment or EOL
 }
@@ -2199,12 +2173,7 @@ char *ParseWordData(char *p)
       p = SkipToComma(p);
       if (*p == ',') ++p;
    }
-   if (l < 1)
-   {
-      ErrorMsg("Missing WORD data\n");
-      ErrorLine(p);
-      exit(1);
-   }
+   if (l < 1) ErrorExit("Missing WORD data\n",p);
    j = AddressIndex(pc);
    if (j >= 0 && df) fprintf(df,"Byte label [%s] $%4.4x $%4.4x %d bytes\n",
                    lab[j].Name,lab[j].Address,pc,l);
@@ -2251,12 +2220,7 @@ char *ParseLongData(char *p)
       p = SkipToComma(p);
       if (*p == ',') ++p;
    }
-   if (l < 4)
-   {
-      ErrorMsg("Missing LONG data\n");
-      ErrorLine(p);
-      exit(1);
-   }
+   if (l < 4) ErrorExit("Missing LONG data\n",p);
    j = AddressIndex(pc);
    if (j >= 0 && df) fprintf(df,"LONG label [%s] $%4.4x $%4.4x %d bytes\n",
                    lab[j].Name,lab[j].Address,pc,l);
@@ -2290,17 +2254,9 @@ char *ParseFillData(char *p)
    int i,m,v;
 
    p = EvalOperand(p,&m,0);
-   if (m < 0 || m > 0xffff)
-   {
-      ErrorMsg("Illegal FILL multiplier %d\n",m);
-      exit(1);
-   }
+   if (m < 0 || m > 0xffff) ErrorExit("Illegal FILL multiplier\n",p);
    p = NeedChar(p,'(');
-   if (!p)
-   {
-      ErrorMsg("Missing '(' before FILL value\n");
-      exit(1);
-   }
+   if (!p) ErrorExit("Missing '(' before FILL value\n",p);
    p = EvalOperand(p+1,&v,0);
    v &= 0xff;
    if (!Pass)
@@ -2350,21 +2306,13 @@ char *IncludeFile(char *p)
    char FileName[256];
    char *fp;
    p = NeedChar(p,'"');
-   if (!p)
-   {
-      ErrorMsg("Missing quoted filename after INCLUDE\n");
-      exit(1);
-   }
+   if (!p) ErrorExit("Missing quoted filename after INCLUDE\n",p);
    fp = FileName;
    ++p;
    while (*p != 0 && *p != '"') *fp++ = *p++;
    *fp = 0;
    if (df) fprintf(df,"fopen %s\n",FileName);
-   if (IncludeLevel >= 99)
-   {
-      ErrorMsg("Too many includes nested ( >= 99)\n");
-      exit(1);
-   }
+   if (IncludeLevel >= 99) ErrorExit("Too many includes nested ( >= 99)\n",p);
    sf = fopen(FileName,"r");
    if (!sf)
    {
@@ -2397,9 +2345,10 @@ char *ParseStoreData(char *p)
 
    if (Pass) return p + strlen(p);
    p = EvalOperand(p,&Start,0);
-   if (Start < 0 || Start > 0xfffff)
+   if (Start < 0 || Start > 0xffff)
    {
       ErrorMsg("Illegal start address for STORE %d\n",Start);
+      ErrorLine(p);
       exit(1);
    }
    p = NeedChar(p,',');
@@ -2412,6 +2361,7 @@ char *ParseStoreData(char *p)
    if (Length < 0 || Length > 0x10000)
    {
       ErrorMsg("Illegal length for STORE %d\n",Length);
+      ErrorLine(p);
       exit(1);
    }
    p = NeedChar(p,',');
@@ -2439,11 +2389,7 @@ char *ParseStoreData(char *p)
       else if (StrMatch(p, "SREC")) FileFormat = SRECORD;
       else if (StrMatch(p, "S19"))  FileFormat = SRECORD;
       else if (StrMatch(p, "SPARROW"))  FileFormat = SPARROW;
-      else
-      {
-         ErrorMsg("Unknown output file format\n");
-         exit(1);
-      }
+      else ErrorExit("Unknown output file format\n",p);
       if (df) fprintf(df,"Filefornat = %d\n",FileFormat);
       p = NeedChar(p,',');
       if (p)
@@ -2452,6 +2398,7 @@ char *ParseStoreData(char *p)
          if (Entry < 0 || Entry > 0xffff)
          {
             ErrorMsg("Illegal execution start address for STORE %d\n",Entry);
+            ErrorLine(p);
             exit(1);
          }
       } else p = EndPtr;
@@ -2474,6 +2421,7 @@ char *ParseStoreData(char *p)
    else
    {
       ErrorMsg("number of storage files exceeds %d\n",SFMAX);
+      ErrorLine(p);
       exit(1);
    }
    PrintLine();
@@ -2501,6 +2449,7 @@ char *ParseLoadData(char *p)
       if (Start < 0 || Start > 0xffff)
       {
          ErrorMsg("Illegal start address for LOAD %d\n",Start);
+         ErrorLine(p);
          exit(1);
       }
       p = NeedChar(p,',');
@@ -2549,6 +2498,7 @@ char *ParseBSSData(char *p)
    if (m < 1 || m > 32767)
    {
       ErrorMsg("Illegal BSS size %d\n",m);
+      ErrorLine(p);
       exit(1);
    }
    if (ListOn && !Pass)
@@ -2576,6 +2526,7 @@ char *ParseCPUData(char *p)
    else
    {
       ErrorMsg("Unknown CPU %d - use 6809 or 6309\n",CPU);
+      ErrorLine(p);
       exit(1);
    }
    if (ListOn && !Pass)
@@ -2594,12 +2545,7 @@ char *ParseOnOff(char *p, int *v)
    else if (*p == '0') *v = 0;
    else if (!StrNCaseCmp(p,"ON" ,2)) *v = 1;
    else if (!StrNCaseCmp(p,"OFF",3)) *v = 0;
-
-   else
-   {
-      ErrorMsg("Unknown option\n");
-      exit(1);
-   }
+   else ErrorExit("Unknown option\n",p);
    if (ListOn && !Pass)
    {
       PrintLiNo();
@@ -2620,10 +2566,7 @@ char *ParseBitData(char *p)
       p = SkipSpace(p+1);
       if (*p == '*') v |= 1;
       else if (*p != '.')
-      {
-         ErrorMsg("use only '*' for 1 and '.' for 0 in BITS statement\n");
-         exit(1);
-      }
+         ErrorExit("use only '*' for 1 and '.' for 0 in BITS statement\n",p);
    }
    if (ListOn && !Pass)
    {
@@ -2650,10 +2593,7 @@ char *ParseCmapData(char *p)
       p = SkipSpace(p+1);
       if (*p == '*') v |= 1;
       else if (*p != '.')
-      {
-         ErrorMsg("use only '*' for 1 and '.' for 0 in CMAP statement\n");
-         exit(1);
-      }
+         ErrorMsg("use only '*' for 1 and '.' for 0 in CMAP statement\n",p);
    }
    if (!Pass)
    {
@@ -2754,11 +2694,7 @@ char *ParseByteData(char *p)
          v = UNDEF;
          p = EvalOperand(p,&v,0);
          if (v == UNDEF && !Pass)
-         {
-            ErrorMsg("Undefined symbol in BYTE data\n");
-            ErrorLine(p);
-            exit(1);
-         }
+            ErrorExit("Undefined symbol in BYTE data\n",p);
          if (v > 255 || v < -127) ByteBuffer[l++] = v >> 8;
          ByteBuffer[l++] = v & 0xff;
          if (df)
@@ -2770,12 +2706,7 @@ char *ParseByteData(char *p)
       p = SkipToComma(p);
       if (*p == ',') ++p;
    }
-   if (l < 1)
-   {
-      ErrorMsg("Missing byte data\n");
-      ErrorLine(p);
-      exit(1);
-   }
+   if (l < 1) ErrorExit("Missing byte data\n",p);
    j = AddressIndex(pc);
    if (j >= 0)
    for ( ; j < Labels ; ++j) // There may be multiple lables on this address
@@ -2814,11 +2745,7 @@ char *Parsebit5Data(char *p)
 
    p = SkipSpace(p);
    if (strlen(p) < 7 || p[0] != '"' || p[6] != '"')
-   {
-      ErrorMsg("Need 5 character string\n");
-      ErrorLine(p);
-      exit(1);
-   }
+      ErrorExit("Need 5 character string\n",p);
 
    // pack 5 characters into 20 bit
 
@@ -2836,12 +2763,7 @@ char *Parsebit5Data(char *p)
       if (c == ' ') c = 0x40;
       if (c == '2') c = 'Z'+1;
       if (c == '3') c = 'Z'+2;
-      if (c < '?' || c > 'Z'+2)
-      {
-         ErrorMsg("illegal character\n");
-         ErrorLine(p);
-         exit(1);
-      }
+      if (c < '?' || c > 'Z'+2) ErrorExit("illegal character\n",p);
       v = (v << 5) | (c - '?');
    }
         if (p[5] == 'C') v |= (1 << 20);
@@ -2975,10 +2897,8 @@ char *SetPC(char *p)
 {
    p = NeedChar(p,'=');
    if (p) return ps_org(p+1);
-
-   ++ErrNum;
-   ErrorMsg("Setting PC with \"* = address\" syntax error\n");
-   exit(1);
+   ErrorExit("Setting PC with \"* = address\" syntax error\n",p);
+   return p;
 }
 
 char *ps_rmb(char *p)
@@ -2989,6 +2909,7 @@ char *ps_rmb(char *p)
    {
       ErrorMsg("Only theoretical physicists are allowed to reserve "
                "a negative amount of space: %d bytes\n", size);
+      ErrorLine(p);
       exit(1);
    }
    PrintPCLine();
@@ -3076,11 +2997,7 @@ char *CheckPseudo(char *p)
    {
       p = PseudoTab[i].foo(p+strlen(PseudoTab[i].keyword));
       if (pc > 0x10000)
-      {
-         ErrorMsg("Program counter overflow\n");
-         ErrorLine(p);
-         exit(1);
-      }
+         ErrorExit("Program counter overflow\n",p);
       return NULL; // flag for pseudo op processed
    }
    return p;
@@ -3095,6 +3012,7 @@ void AddLabel(char *p)
    {
       ++ErrNum;
       ErrorMsg("Too many labels (> %d)\n",MAXLAB);
+      ErrorLine(p);
       exit(1);
    }
    l = strlen(p);
@@ -3106,6 +3024,7 @@ void AddLabel(char *p)
       if (!StrCaseCmp(p,Mat[i].Mne))
       {
          ErrorMsg("Use of reserved mnemonic <%s> as label or operand\n",p);
+         ErrorLine(p);
          exit(1);
       }
    }
@@ -3117,6 +3036,7 @@ void AddLabel(char *p)
       if (!StrCaseCmp(p,PseudoTab[i].keyword))
       {
          ErrorMsg("Use of reserved keyword <%s> as label or operand\n",p);
+         ErrorLine(p);
          exit(1);
       }
    }
@@ -3149,6 +3069,7 @@ int CheckCondition(char *p)
       CheckSkip();
       if (Skipping) return 0;     // Include line in listing
       ErrorMsg("%s\n",p+6);
+      ErrorLine(p);
       exit(1);
    }
    Ifdef  = !strcmpword(p,"ifdef");
@@ -3158,12 +3079,7 @@ int CheckCondition(char *p)
    {
       r = 1;
       IfLevel++;
-      if (IfLevel > 9)
-      {
-         ++ErrNum;
-         ErrorMsg("More than 10  IF or IFDEF conditions nested\n");
-         exit(1);
-      }
+      if (IfLevel > 9) ErrorExit("More than 9  IF or IFDEF conditions nested\n",p);
       if (Ifdef)
       {
          p = EvalOperand(p+6,&v,0);
@@ -3206,11 +3122,7 @@ int CheckCondition(char *p)
       PrintLiNo();
       if (ListOn && !Pass) fprintf(lf,"              %s\n",Line);
       if (IfLevel < 0)
-      {
-         ++ErrNum;
-         ErrorMsg("endif without if\n");
-         exit(1);
-      }
+         ErrorExit("endif without if\n",p);
       CheckSkip();
       if (df) fprintf(df,"ENDIF SkipLevel[%d]=%d\n",IfLevel,SkipLine[IfLevel]);
    }
@@ -3246,12 +3158,7 @@ char *ScanRegister(char *p, int *v)
    {
       if (!StrNCaseCmp(RegisterNames[i],p,strlen(RegisterNames[i]))) break;
    }
-   if (i < 0)
-   {
-      ErrorLine(p);
-      ErrorMsg("Unknown register name or wrong CPU set\n");
-      exit(1);
-   }
+   if (i < 0) ErrorExit("Unknown register name or wrong CPU set\n",p);
    *v = i;
    q = p + strlen(RegisterNames[i]);
    q = SkipSpace(q);
@@ -3268,12 +3175,7 @@ char *TFMRegister(char *p, int *v)
    {
       if (RegisterNames[i][0] == toupper(*p)) break;
    }
-   if (i < 0)
-   {
-      ErrorLine(p);
-      ErrorMsg("Illegal register name for TFM or wrong CPU set\n");
-      exit(1);
-   }
+   if (i < 0) ErrorExit("Illegal register name for TFM or wrong CPU set\n",p);
    *v = i;
    return p+1;
 }
@@ -3281,10 +3183,7 @@ char *TFMRegister(char *p, int *v)
 
 void OperandError(char *p)
 {
-   ++ErrNum;
-   ErrorLine(p);
-   ErrorMsg("Syntax error in operand\n");
-   exit(1);
+   ErrorExit("Syntax error in operand\n",p);
 }
 
 
@@ -3568,12 +3467,7 @@ char *GenerateCode(char *p)
 
    p = SkipSpace(p);
 
-   if (pc < 0)
-   {
-      ErrorLine(p);
-      ErrorMsg("Undefined program counter (PC)\n");
-      exit(1);
-   }
+   if (pc < 0) ErrorExit("Undefined program counter (PC)\n",p);
 
    // immediate data to memory
 
@@ -3581,12 +3475,7 @@ char *GenerateCode(char *p)
    if (XIM)
    {
       if (*p == '#') ++p;
-      else
-      {
-         ErrorLine(p);
-         ErrorMsg("Immediate operand must start with '#'\n");
-         exit(1);
-      }
+      else ErrorExit("Immediate operand must start with '#'\n",p);
       p   = EvalOperand(p,&v,0);
 
       // make pseudo 16 bit opcode with embedded immediate value
@@ -3594,12 +3483,7 @@ char *GenerateCode(char *p)
       XIM = ((Mat[MneIndex].Opc[AM_Extended] << 8) | (v & 0xff));
       ol  = 2;
       if (*p == ',') ++p;
-      else
-      {
-         ErrorLine(p);
-         ErrorMsg("Immediate value must be followed by comma\n");
-         exit(1);
-      }
+      else ErrorExit("Immediate value must be followed by comma\n",p);
       v = UNDEF;
       oc = XIM;
    }
@@ -3631,22 +3515,12 @@ char *GenerateCode(char *p)
 
    // check for missing operand
 
-   else if (OpText[0] == 0)
-   {
-      ++ErrNum;
-      ErrorLine(p);
-      ErrorMsg("Missing operand\n");
-      exit(1);
-   }
+   else if (OpText[0] == 0) ErrorExit("Missing operand\n",p);
 
    // illegal operand conditions
 
    else if (OpText[0] == 0x27) // apostrophe
-   {
-      ErrorLine(p);
-      ErrorMsg("Operand cannot start with apostrophe\n");
-      exit(1);
-   }
+      ErrorExit("Operand cannot start with apostrophe\n",p);
 
    // register address mode
 
@@ -3673,12 +3547,7 @@ char *GenerateCode(char *p)
          q = TFMRegister(OpText,&r1);
          if (*q == '+' || *q == '-') p1 = *q++;
          if (*q == ',') q++;
-         else
-         {
-            ErrorLine(p);
-            ErrorMsg("Missing comma\n");
-            exit(1);
-         }
+         else ErrorExit("Missing comma\n",p);
          q = TFMRegister(q     ,&r2);
          if (*q == '+' || *q == '-') p2 = *q++;
          pb = (r1 << 4) | r2;
@@ -3688,12 +3557,7 @@ char *GenerateCode(char *p)
          else  if (p1 == '-' && p2 == '-') oc = 0x1139;
          else  if (p1 == '+' && p2 ==  0 ) oc = 0x113a;
          else  if (p1 ==  0  && p2 == '+') oc = 0x113b;
-         else
-         {
-            ErrorLine(p);
-            ErrorMsg("Illegal increment/decrement combination\n");
-            exit(1);
-         }
+         else ErrorExit("Illegal increment/decrement combination\n",p);
       }
 
       // register register
@@ -3761,12 +3625,7 @@ char *GenerateCode(char *p)
          else
          {
             rop = EvalOperand(OpText,&v,0);
-            if (*rop)
-            {
-               ErrorLine(rop);
-               ErrorMsg("Extra text after branch operand\n");
-               exit(1);
-            }
+            if (*rop) ErrorExit("Extra text after branch operand\n",rop);
          }
       }
       else if (OpText[0] == '+') // local forward label
@@ -3787,11 +3646,7 @@ char *GenerateCode(char *p)
       if (v != UNDEF) relv -= (pc + il);
       else if (Pass == 1) ++Unresolved;
       if (Pass != 1 && v == UNDEF)
-      {
-         ErrorLine(p);
-         ErrorMsg("Branch to undefined label\n");
-         exit(1);
-      }
+         ErrorExit("Branch to undefined label\n",p);
 
       if (relv != UNDEF && (relv < -128 || relv > 127)) // long branch
       {
@@ -3857,24 +3712,15 @@ char *GenerateCode(char *p)
       else
       {
          rop = EvalOperand(OpText+1,&v,0);
-         if (*rop)
-         {
-            ErrorLine(rop);
-            ErrorMsg("Extra text after operand\n");
-            exit(1);
-         }
+         if (*rop) ErrorExit("Extra text after operand\n",rop);
       }
       ol = 1 + (oc > 255);
       ql = RegisterSize(MneIndex);
       if (oc == 0x118d) ql = 1; // DIVD uses byte operand
       if (ql == 4 && oc != 0xcd) ql = 2; // only LDQ immediate has 32 bit value
       il = ol + ql;
-      if (!Pass && v == UNDEF)
-      {
-         ErrorLine(p);
-         ErrorMsg("Undefined immediate value\n");
-         exit(1);
-      }
+      if (!Pass && v == UNDEF && oc != 0xcd)
+         ErrorExit("Undefined immediate value\n",p);
       if (ql == 1 && !Pass && (v < -128 || v > 255))
       {
          ErrorLine(p);
@@ -3895,12 +3741,7 @@ char *GenerateCode(char *p)
    else if (OpText[0] == '[')
    {
       l = strlen(OpText);
-      if (OpText[l-1] != ']')
-      {
-         ErrorLine(p);
-         ErrorMsg("Missing closing bracket ]\n");
-         exit(1);
-      }
+      if (OpText[l-1] != ']') ErrorExit("Missing closing bracket ]\n",p);
       oc = Mat[MneIndex].Opc[AM_Indexed];
       ol = 1 + (oc > 255);
       if (oc < 0)
@@ -3973,13 +3814,7 @@ char *GenerateCode(char *p)
       pb |= i; // add target bit
       p = strchr(p,','); // skip after comma
       q = strrchr(p,'.'); // search bit field
-      if (!p || !q)
-      {
-         ++ErrNum;
-         ErrorLine(p);
-         ErrorMsg("Illegal syntax in bit operand\n");
-         exit(1);
-      }
+      if (!p || !q) ErrorExit("Illegal syntax in bit operand\n",p);
       *q = 0; // separate bit number from address
       p = EvalOperand(p+1,&v,0);
       if (v != UNDEF && (v < 0 || v > 255))
@@ -4122,12 +3957,7 @@ char *GenerateCode(char *p)
 
    if (!Pass)
    {
-      if (v == UNDEF && ql > 0)
-      {
-         ErrorLine(p);
-         ErrorMsg("Use of an undefined label\n");
-         exit(1);
-      }
+      if (v == UNDEF && ql > 0) ErrorExit("Use of an undefined label\n",p);
 
       // insert binary code
 
@@ -4158,11 +3988,7 @@ char *GenerateCode(char *p)
       else if (ql == 2) // 16 bit value
       {
          if (v > 0xffff || v < -32768)
-         {
-            ErrorLine(p);
-            ErrorMsg("16 bit address/value out of range\n");
-            exit(1);
-         }
+            ErrorExit("16 bit address/value out of range\n",p);
          PutWord(pc+ibi,v);
       }
 
@@ -4171,12 +3997,7 @@ char *GenerateCode(char *p)
          if (v >= 0xff00 && v <= 0xffff) v &= 0xff;
          if ((v-(DP<<8)) < 256 && (v-(DP<<8)) >= -128) v -= DP<<8;
          if (v > 255 || v < -128)
-         {
-            printf("v = %x  DP = %x\n",v,DP);
-            ErrorLine(p);
-            ErrorMsg("8 bit address/value out of range\n");
-            exit(1);
-         }
+            ErrorExit("8 bit address/value out of range\n",p);
          PutByte(pc+ibi,v);
       }
 
@@ -4197,11 +4018,7 @@ char *GenerateCode(char *p)
 
    if (pc+il > 0xffff)
    {
-      if (!Pass)
-      {
-         ++ErrNum;
-         ErrorMsg("Program counter exceeds 64 KB\n");
-      }
+      if (!Pass) ErrorExit("Program counter exceeds 64 KB\n",p);
    }
    else pc += il;
    return p;
@@ -4577,11 +4394,7 @@ void ParseLine(char *cp)
       {
          plulab[i][plucnt[i]] = pc;
          if (++plucnt[i] > PLUMAX-2)
-         {
-            ++ErrNum;
-            ErrorMsg("too many local labels\n");
-            exit(1);
-         }
+            ErrorExit("too many local labels\n",cp);
       }
    }
 
@@ -4637,11 +4450,7 @@ void ParseLine(char *cp)
    if (ListOn && !Pass) fprintf(lf,"\n");
    if (*cp == 0 || *cp == ';' || *cp == '*') return; // end of code
 
-   printf("<%s>\n",cp);
-   ++ErrNum;
-   ErrorLine(cp);
-   ErrorMsg("Syntax error\n");
-   exit(1);
+   ErrorExit("Syntax error\n",cp);
 }
 
 void Phase1Listing(void)
@@ -5126,7 +4935,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 16-Sep-2026         *\n");
+      printf("* Bit Shift Assembler 25-Oct-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
@@ -5191,6 +5000,5 @@ int main(int argc, char *argv[])
              ErrNum, ErrNum == 1 ? "" : "S", ErrNum == 1 ? " " : "");
    else if (!Quiet) printf("* OK, no errors                           *\n");
    if (!Quiet) printf("*******************************************\n\n");
-   // MneStat();
    return ErrNum;
 }
