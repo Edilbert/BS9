@@ -1104,12 +1104,12 @@ INDEX
          |  * 10DD        STQ        Direct          8  (7)         3     |
          |    10DE        LDS        Direct          6  (5)         3     |
          |    10DF        STS        Direct          6  (5)         3     |
-         |  * 10DC        LDQ        Indexed         8+             3+    |
-         |  * 10DD        STQ        Indexed         8+             3+    |
+         |  * 10EC        LDQ        Indexed         8+             3+    |
+         |  * 10ED        STQ        Indexed         8+             3+    |
          |    10EE        LDS        Indexed         6+             3+    |
          |    10EF        STS        Indexed         6+             3+    |
-         |  * 10DC        LDQ        Extended        9  (8)         4     |
-         |  * 10DD        STQ        Extended        9  (8)         4     |
+         |  * 10FC        LDQ        Extended        9  (8)         4     |
+         |  * 10FD        STQ        Extended        9  (8)         4     |
          |    10FE        LDS        Extended        7  (6)         4     |
          |    10FF        STS        Extended        7  (6)         4     |
          |  * 1130        BAND       Memory          7  (6)         4     |
@@ -1138,7 +1138,7 @@ INDEX
          |  * 113B        TFM R,R+   Register        6+3n           3     |
          |  * 113C        BITMD      Immediate       4              3     |
          |  * 113D        LDMD       Immediate       5              5     |
-         |    113F        SWI2       Inherent        20 ( )         2     |
+         |    113F        SWI3       Inherent        20 ( )         2     |
          |  * 1143        COME       Inherent        3  (2)         2     |
          |  * 114A        DECE       Inherent        3  (2)         2     |
          |  * 114C        INCE       Inherent        3  (2)         2     |
