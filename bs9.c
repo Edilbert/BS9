@@ -335,6 +335,7 @@ For example:
     #define M_PI 3.14159265358979323846
 #endif
 
+typedef unsigned int UINT;
 #define BYTEMIN (-128)
 #define BYTEMAX ( 255)
 #define WORDMIN (-32768)
@@ -1994,9 +1995,9 @@ int op_ceq(int l, int r, char *p) { (void)p;return l == r; }
 int op_cne(int l, int r, char *p) { (void)p;return l != r; }
 int op_and(int l, int r, char *p) { (void)p;return l && r; }
 int op_lor(int l, int r, char *p) { (void)p;return l || r; }
-int op_xor(int l, int r, char *p) { (void)p;return (int32_t)((uint32_t)l^(uint32_t)r);}
-int op_bnd(int l, int r, char *p) { (void)p;return (int32_t)((uint32_t)l&(uint32_t)r);}
-int op_bor(int l, int r, char *p) { (void)p;return (int32_t)((uint32_t)l|(uint32_t)r);}
+int op_xor(int l, int r, char *p) { (void)p;return (int)((UINT)l^(UINT)r);}
+int op_bnd(int l, int r, char *p) { (void)p;return (int)((UINT)l&(UINT)r);}
+int op_bor(int l, int r, char *p) { (void)p;return (int)((UINT)l|(UINT)r);}
 
 
 struct binop_struct
