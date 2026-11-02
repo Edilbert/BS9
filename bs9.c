@@ -754,7 +754,7 @@ struct MatStruct
    {"INCY"    ,{2,0x3121,    -1,    -1,    -1,    -1,    -1,    -1}}
  };
 
-#define DIMOP_6809 139
+#define DIMOP_6809 140
 #define DIMOP_6309 (sizeof(Mat) / sizeof(struct MatStruct))
 
 int DimOp = DIMOP_6309;
@@ -4541,6 +4541,8 @@ void Phase2(void)
    CPU       = 6309;
    Scope[0]  =    0;
    ModuleStart =  0;
+   DimOp = DIMOP_6309;
+   RegisterNames = Register_6309;
 
    for (i=0 ; i < 11 ; ++i) minlab[i] = UNDEF;
 
