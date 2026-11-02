@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 25-Oct-2026
+Version: 02-Nov-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -495,6 +495,8 @@ enum Addressing_Mode
 #define OP_LBRA    0x16
 #define OP_LBSR    0x17
 #define OP_BRA     0x20
+#define OP_BRN     0x21
+#define OP_LBRN  0x1021
 #define OP_BHI     0x22
 #define OP_LBHI  0x1022
 #define OP_BLE     0x2F
@@ -829,7 +831,7 @@ int ol;              // opcode length
 int pl;              // postbyte length
 int ql;              // operand length
 int pc = -1;         // program counter
-int bss;             // bss counter
+int bss = -1;        // bss counter
 
 int IfLevel;         // if nesting level
 int Skipping;        // inside 'false' branch
@@ -2850,18 +2852,25 @@ char *ps_align(char *p)
 {
    int a,dal,fill;
 
-   dal  = 0;                  // data align = false
    p = SkipSpace(p);
-   if (*p == '*') ++p;        // PC align
    if (*p == '&')
    {
-      dal = 1;                // data align
       ++p;
+      dal  = 1;               // data align
+      fill = Preset;
+      if (bss < 0) ErrorExit("Align Data Address undefined\n",p);
    }
-   if (dal) fill = Preset;
-   else     fill = 0x12  ;    // NOP
+   else                       // PC align
+   {
+      if (*p == '*') ++p;
+      dal  = 0;               // data align = false
+      fill = 0x12  ;          // NOP
+      if (pc < 0) ErrorExit("Align PC undefined\n",p);
+   }
 
-   p = AlignFill(p,&a,&fill);
+   p = AlignFill(p+1,&a,&fill);
+   if (a < 1 || a > 0x7fff) ErrorExit("Illegal align parameter\n",p);
+   if (fill < -128 || fill > 255) ErrorExit("Illegal fill value\n",p);
 
    if (dal)
    {
@@ -3333,8 +3342,9 @@ int SetPostByte(char *p, int *v)
    {
       if (df) fprintf(df,"check PC relative %s\n",p);
       p = EvalOperand(p,&off,0);
-      off -= pc+3;
-      if (ForcedMode < 0 || (off >= -128 && off < 128 && ROM[pc] != 0x8d))
+      if (oc > 255) off -= pc+4; // two byte opcodes
+      else          off -= pc+3;
+      if (ForcedMode < 0 || (off >= -128 && off < 128))
       {
          ql = 1;
          *v = off;
@@ -3600,11 +3610,11 @@ char *GenerateCode(char *p)
 
       if (Optimize) // make all branches short for Optimize
       {
-         if (oc >= OP_LBHI && oc <= OP_LBLE) oc &= 0xff;
+         if (oc >= OP_LBRN && oc <= OP_LBLE) oc &= 0xff;
          if (oc == OP_LBRA) oc = OP_BRA; // LBRA -> BRA
          if (oc == OP_LBSR) oc = OP_BSR; // LBSR -> BSR
       }
-      else if (oc >= OP_LBHI  &&  oc <= OP_LBLE)
+      else if (oc >= OP_LBRN  &&  oc <= OP_LBLE)
       {
          ol = 2;
          ql = 2;
@@ -4524,6 +4534,7 @@ void Phase2(void)
    int i,l,Eof;
 
    pc        =   -1;
+   bss       =   -1;
    EnumValue =   -1;
    ForcedEnd =    0;
    ListOn    =    1;
@@ -4936,7 +4947,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 25-Oct-2026         *\n");
+      printf("* Bit Shift Assembler 02-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
