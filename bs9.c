@@ -3250,7 +3250,6 @@ int PostIndexW(int reg,char *p)
    if (df) fprintf(df,"PostIndexW [%c]\n",*p);
    if (*p == 'w' || *p == 'W') r = 0xf;
    else                        r = PostIndex(reg,p);
-   if (p[1]) OperandError(p+1);
    return r;
 }
 
@@ -3408,6 +3407,8 @@ int SetPostByte(char *p, int *v)
       if (df) fprintf(df,"constant off = %x\n",off);
       *v = off;
       reg = PostIndexW(reg,++p);
+      p = SkipSpace(p+1);
+      if (*p) OperandError(p);
 
       if (reg == 0xf) // W register
       {
