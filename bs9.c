@@ -3246,9 +3246,12 @@ int PostIndexReg(int reg,char *p)
 
 int PostIndexW(int reg,char *p)
 {
+   int r;
    if (df) fprintf(df,"PostIndexW [%c]\n",*p);
-   if (*p == 'w' || *p == 'W') return 0xf;
-   return PostIndex(reg,p);
+   if (*p == 'w' || *p == 'W') r = 0xf;
+   else                        r = PostIndex(reg,p);
+   if (p[1]) OperandError(p+1);
+   return r;
 }
 
 // ***********
@@ -3390,11 +3393,11 @@ int SetPostByte(char *p, int *v)
          else if (amo == 1) reg = 0xcf; // ,W++
          else if (amo == 3) reg = 0xef; // ,--W
          else OperandError(p);
-         if (ind) reg +=1;
          if (df) fprintf(df,"W pb = %2.2x ind = %2.2x\n",reg,ind);
          return reg;
       }
       if (*p) OperandError(p);
+      if (ind && (inc == 1 || dec == 1)) OperandError(p);
       return (0x80 | reg | ind | amo);
    }
 
