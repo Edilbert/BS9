@@ -3482,7 +3482,7 @@ char *GenerateCode(char *p)
 
    if (pc < 0) ErrorExit("Undefined program counter (PC)\n",p);
 
-   // immediate data to memory AIM OIM XIM EIM
+   // immediate data to memory AIM OIM TIM EIM
 
    XIM = (Mat[MneIndex].Mne[1] == 'I' && Mat[MneIndex].Mne[2] == 'M');
    if (XIM)
@@ -3548,6 +3548,9 @@ char *GenerateCode(char *p)
          ol = 1 + (oc > 255); // instruction length
          il = ol + 1;
          pb  = ScanPushList(p);
+         if ((Mat[MneIndex].Mne[3] == 'S' && (strchr(OpText,'S') || strchr(OpText,'s')))
+         ||  (Mat[MneIndex].Mne[3] == 'U' && (strchr(OpText,'U') || strchr(OpText,'u'))))
+            OperandError(p);
          p += strlen(p) ;          // ignore rest
       }
 
