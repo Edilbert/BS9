@@ -35,7 +35,7 @@ If you have a source code named "hello.as9", run the assembler with:
 bs9 hello
 
 It will read "hello.as9" as input file and write the
-listing file with cross reference "hello.lst".
+listing file with cross reference "hello.ls9".
 Binary output is controlled within the source file by means
 of the pseudo op "STORE" (see below for syntax):
 
@@ -3144,8 +3144,10 @@ int RegisterSize(int n)
 {
    char r;
 
-   if (!StrNCaseCmp(Mat[n].Mne,"LDMD",4)) return 1;
-   if (!StrNCaseCmp(Mat[n].Mne,"CWAI",4)) return 1;
+   if (!StrNCaseCmp(Mat[n].Mne,"LDMD" ,4)) return 1;
+   if (!StrNCaseCmp(Mat[n].Mne,"CWAI" ,4)) return 1;
+   if (!StrNCaseCmp(Mat[n].Mne,"DIVD" ,4)) return 1;
+   if (!StrNCaseCmp(Mat[n].Mne,"BITMD",5)) return 1;
 
    r = Mat[n].Mne[strlen(Mat[n].Mne)-1];
 
@@ -3480,7 +3482,7 @@ char *GenerateCode(char *p)
 
    if (pc < 0) ErrorExit("Undefined program counter (PC)\n",p);
 
-   // immediate data to memory
+   // immediate data to memory AIM OIM XIM EIM
 
    XIM = (Mat[MneIndex].Mne[1] == 'I' && Mat[MneIndex].Mne[2] == 'M');
    if (XIM)
@@ -3495,8 +3497,9 @@ char *GenerateCode(char *p)
       ol  = 2;
       if (*p == ',') ++p;
       else ErrorExit("Immediate value must be followed by comma\n",p);
+      strcpy(OpText,p); // strip immediate value from OpText
+      p = OpText;
       v = UNDEF;
-      oc = XIM;
    }
 
    // inherent instruction (no operand)
@@ -3727,8 +3730,6 @@ char *GenerateCode(char *p)
       }
       ol = 1 + (oc > 255);
       ql = RegisterSize(MneIndex);
-      if (oc == 0x113c) ql = 1; // BITMD uses byte operand
-      if (oc == 0x118d) ql = 1; // DIVD  uses byte operand
       if (ql == 4 && oc != 0xcd) ql = 2; // only LDQ immediate has 32 bit value
       il = ol + ql;
       if (!Pass && v == UNDEF && oc != 0xcd)
@@ -3754,8 +3755,15 @@ char *GenerateCode(char *p)
    {
       l = strlen(OpText);
       if (OpText[l-1] != ']') ErrorExit("Missing closing bracket ]\n",p);
-      oc = Mat[MneIndex].Opc[AM_Indexed];
-      ol = 1 + (oc > 255);
+      if (XIM)
+      {
+         oc = XIM = 0x6000 | (XIM & 0xfff);
+      }
+      else
+      {
+         oc = Mat[MneIndex].Opc[AM_Indexed];
+         ol = 1 + (oc > 255);
+      }
       if (oc < 0)
       {
          ++ErrNum;
@@ -3854,7 +3862,10 @@ char *GenerateCode(char *p)
 
    else if (strchr(p,','))
    {
-      if (XIM) oc = XIM & 0xefff; // extended -> indexed
+      if (XIM)
+      {
+         oc = XIM = (XIM & 0xfff); // indexed
+      }
       else oc = Mat[MneIndex].Opc[AM_Indexed];
       if (df) fprintf(df,"indexed am oc = %4.4x\n",oc);
       if (oc < 0)
@@ -3866,8 +3877,7 @@ char *GenerateCode(char *p)
       }
       pb = SetPostByte(p,&v);
 
-      if (XIM) ol = 2;
-      else     ol = 1 + (oc > 255); // opcode length
+      ol = 1 + (oc > 255); // opcode length
       il = ol + 1 + ql;    // opcode + postbyte + address
    }
 
@@ -3887,7 +3897,7 @@ char *GenerateCode(char *p)
          }
          else
          {
-            oc = XIM & 0xfff; // extended -> direct
+            oc = XIM = XIM & 0xfff; // extended -> direct
             ql = 1;
          }
          il = ol + ql;
@@ -4912,7 +4922,7 @@ int main(int argc, char *argv[])
    }
 
    // default file names if only source file specified:
-   // prog.as9   prog.pp   prog.lst   prog.opt
+   // prog.as9   prog.pp   prog.ls9   prog.opt
 
    l = strlen(argsrc);
    if (l > FNSIZE - 4)
