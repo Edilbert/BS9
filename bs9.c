@@ -3864,7 +3864,7 @@ char *GenerateCode(char *p)
    {
       if (XIM)
       {
-         oc = XIM = (XIM & 0xfff); // indexed
+         oc = XIM = 0x6000 | (XIM & 0xfff);
       }
       else oc = Mat[MneIndex].Opc[AM_Indexed];
       if (df) fprintf(df,"indexed am oc = %4.4x\n",oc);
