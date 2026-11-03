@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 02-Nov-2026
+Version: 03-Nov-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -3727,7 +3727,8 @@ char *GenerateCode(char *p)
       }
       ol = 1 + (oc > 255);
       ql = RegisterSize(MneIndex);
-      if (oc == 0x118d) ql = 1; // DIVD uses byte operand
+      if (oc == 0x113c) ql = 1; // BITMD uses byte operand
+      if (oc == 0x118d) ql = 1; // DIVD  uses byte operand
       if (ql == 4 && oc != 0xcd) ql = 2; // only LDQ immediate has 32 bit value
       il = ol + ql;
       if (!Pass && v == UNDEF && oc != 0xcd)
@@ -4949,7 +4950,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 02-Nov-2026         *\n");
+      printf("* Bit Shift Assembler 03-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
