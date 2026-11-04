@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 03-Nov-2026
+Version: 04-Nov-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -5022,7 +5022,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 03-Nov-2026         *\n");
+      printf("* Bit Shift Assembler 04-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
