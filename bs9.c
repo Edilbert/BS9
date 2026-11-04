@@ -4183,6 +4183,7 @@ void RecordMacro(char *p)
    char Buf[ML];
    char *b;
    char *at;
+   char *pe = p;  // for error messages
 
    if (Macros > MAXMAC -2)
    {
@@ -4197,6 +4198,7 @@ void RecordMacro(char *p)
    if (df) fprintf(df,"macro type = %d\n",mf);
 
    p = NextSymbol(p,Macro);
+   if (*p == 0) ErrorExit("Macro Syntax Error\n",pe);
    l = strlen(Macro);
    if (mf) p = StrMatch(p,"MACRO") + 5;
    p = SkipSpace(p);
@@ -4330,10 +4332,12 @@ int ExpandMacro(char *m)
             Macro,an,Mac[j].Narg);
       exit(1);
    }
-   ++MacLev;
-   MacPtr[MacLev] = Mac[j].Body;
-   if (df) fprintf(df,"Macro Level:%d\n",MacLev);
-   if (df) fprintf(df,"Macro Body :<<<%s>>>\n",Mac[j].Body);
+
+   if (Mac[j].Body) // ignore empty macros
+   {
+      ++MacLev;
+      MacPtr[MacLev] = Mac[j].Body;
+   }
 
    if (!Pass)
    {
@@ -4349,8 +4353,6 @@ void NextMacLine(char *w)
    int i;
    char *r;
 
-   if (df) fprintf(df,"Next Macro Line:%s\n",w);
-
    // do not count macro expansion lines
 
    --LiNo;
@@ -4359,7 +4361,6 @@ void NextMacLine(char *w)
 
    while (MacLev > 0 && *MacPtr[MacLev] == 0) --MacLev;
 
-   if (df) fprintf(df,"MacPtr[%d] = {{%s}}\n",MacLev,MacPtr[MacLev]);
 
    if (MacPtr[MacLev] && *MacPtr[MacLev])
    {
