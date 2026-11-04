@@ -2420,7 +2420,6 @@ char *ParseStoreData(char *p)
       ErrorLine(p);
       exit(1);
    }
-
    SFA[StoreCount] = Start;
    SFL[StoreCount] = Length;
    SFE[StoreCount] = Entry;
@@ -2451,7 +2450,11 @@ char *ParseLoadData(char *p)
    p = SkipSpace(p);
 
    Advance = 1;
-   if (*p == '\"') Start = pc;
+   if (*p == '\"')
+   {
+      if (pc < 0) ErrorExit("Undefined program counter (missing ORG)\n",p);
+      Start = pc;
+   }
    else
    {
       Advance = 0;
@@ -2883,12 +2886,14 @@ char *ps_align(char *p)
    if (dal)
    {
       a = (a - bss % a) % a;
+      if (bss + a > 0x10000) ErrorExit("ALIGN exceeds 64 KB\n",p);
       if (df) fprintf(df,"Data align %4.4x - %4.4x fill %2.2x\n",bss,bss+a,fill);
       while (a--) ROM[bss++] = fill;
    }
    else
    {
       a = (a - pc  % a) % a;
+      if (pc + a > 0x10000) ErrorExit("ALIGN exceeds 64 KB\n",p);
       if (df) fprintf(df,"Code align %4.4x - %4.4x fill %2.2x\n",pc,pc+a,fill);
       while (a--) ROM[pc++]  = fill;
    }
@@ -2903,6 +2908,12 @@ char *ps_align(char *p)
 char *ps_org(char *p)
 {
    p = ExtractValue(p,&pc);
+   if (pc < 0 || pc > 0x10000)
+   {
+      ErrorMsg("Illegal ORG address %d\n",pc);
+      ErrorLine(p);
+      exit(1);
+   }
    PrintPCLine();
    return p;
 }
@@ -2950,6 +2961,12 @@ char *ps_setdp(char *p)
 {
    p = ExtractValue(p,&DP);
    if (DP > 255) DP >>= 8;      // alternate DP assignment
+   if (DP < 0 || DP > 255)
+   {
+      ErrorMsg("Illegal direct page value %d\n",DP);
+      ErrorLine(p);
+      exit(1);
+   }
    PrintByteLine(DP);
    return p;
 }
@@ -3013,6 +3030,15 @@ char *CheckPseudo(char *p)
    for (i=0 ; i < PSEUDOS ; ++i)
    if (!strcmpword(p,PseudoTab[i].keyword))
    {
+      if (pc < 0)
+      {
+         static const char *Emit[] = {"BITS","BYTE","FCB","DB","FCC","FDB","DW",
+                                      "FILL","LONG","REAL","WORD","RMB","DS",NULL};
+         int k;
+         for (k=0 ; Emit[k] ; ++k)
+            if (!strcmp(PseudoTab[i].keyword,Emit[k]))
+               ErrorExit("Undefined program counter (missing ORG)\n",p);
+      }
       p = PseudoTab[i].foo(p+strlen(PseudoTab[i].keyword));
       if (pc > 0x10000)
          ErrorExit("Program counter overflow\n",p);
@@ -3506,6 +3532,12 @@ char *GenerateCode(char *p)
       if (*p == '#') ++p;
       else ErrorExit("Immediate operand must start with '#'\n",p);
       p   = EvalOperand(p,&v,0);
+      if (!Pass && v != UNDEF && (v < -128 || v > 255))
+      {
+         ErrorLine(p);
+         ErrorMsg("Immediate value out of range (%d)\n",v);
+         exit(1);
+      }
 
       // make pseudo 16 bit opcode with embedded immediate value
 
@@ -3780,9 +3812,9 @@ char *GenerateCode(char *p)
          ErrorMsg("Illegal instruction %s %s\n",Mat[MneIndex].Mne,OpText);
          exit(1);
       }
-      if (!strchr(OpText+1,',')) // indirect address
+      if (!strchr((XIM ? p : OpText)+1,',')) // indirect address
       {
-         p = EvalOperand(OpText+1,&v,0);
+         p = EvalOperand((XIM ? p : OpText)+1,&v,0);
          pb = 0x9f;
          ql = 2;
          il = ol + 3;
@@ -3790,7 +3822,7 @@ char *GenerateCode(char *p)
       }
       else
       {
-         pb = SetPostByte(OpText,&v) | 0x10;
+         pb = SetPostByte(XIM ? p : OpText,&v) | 0x10;
          ol = 1 + (oc > 255); // opcode length
          il = ol + 1 + ql;    // opcode + postbyte + address
       }
@@ -3798,7 +3830,8 @@ char *GenerateCode(char *p)
 
    // register - direct page bit operation
 
-   else if (strchr(p,',') && strchr(p,'.'))
+   else if (Mat[MneIndex].Opc[AM_Direct] >= 0x1130 &&
+            Mat[MneIndex].Opc[AM_Direct] <= 0x1137 && strchr(p,','))
    {
       if (df) fprintf(df,"Check bit op <%s>\n",p);
       oc = Mat[MneIndex].Opc[AM_Direct];
@@ -3899,7 +3932,7 @@ char *GenerateCode(char *p)
       if (XIM)
       {
          ol = 2;
-         if (v > 255)
+         if (v > 255 || ForcedMode > 0)
          {
             oc = XIM;
             ql = 2;
@@ -4047,7 +4080,7 @@ char *GenerateCode(char *p)
       il = 1;
    }
 
-   if (pc+il > 0xffff)
+   if (pc+il > 0x10000)
    {
       if (!Pass) ErrorExit("Program counter exceeds 64 KB\n",p);
    }
@@ -4440,6 +4473,15 @@ void ParseLine(char *cp)
       }
       if ((MneIndex = IsInstruction(cp)) < 0)
       {
+         if (DimOp < (int)DIMOP_6309)       // 6309 mnemonic while CPU = 6809 ?
+         {
+            for (i = DimOp ; i < (int)DIMOP_6309 ; ++i)
+            {
+               l = strlen(Mat[i].Mne);
+               if (!StrNCaseCmp(cp,Mat[i].Mne,l) && !isym(cp[l]))
+                  ErrorExit("6309 instruction not allowed with CPU = 6809\n",cp);
+            }
+         }
          m = ExpandMacro(cp);
          if (m < 0) // not a macro
          {
@@ -4519,6 +4561,9 @@ void Phase1(void)
 
    ForcedEnd = 0;
    Changes   = 0;
+   CPU       = 6309;            // default CPU at the start of every pass
+   DimOp     = DIMOP_6309;
+   RegisterNames = Register_6309;
    LiNo      = 0;
    TotalLiNo = 0;
 
@@ -4559,10 +4604,10 @@ void Phase2(void)
    ForcedEnd =    0;
    ListOn    =    1;
    CPU       = 6309;
+   DimOp     = DIMOP_6309;
+   RegisterNames = Register_6309;
    Scope[0]  =    0;
    ModuleStart =  0;
-   DimOp = DIMOP_6309;
-   RegisterNames = Register_6309;
 
    for (i=0 ; i < 11 ; ++i) minlab[i] = UNDEF;
 
@@ -4789,7 +4834,8 @@ void WriteS19Format(int i)
     int UnwrittenBytes,Addr,BytesInThisLine;
     const char *msg = "Write S19 file";
 
-    filename = (char *)StrNDup(SFF[i],strlen(SFF[i]) + 4);
+    filename = (char *)MallocOrDie(strlen(SFF[i]) + 5);
+    strcpy(filename,SFF[i]);
     ExtPtr = strrchr(filename, '.');
     if (!ExtPtr)
     {
@@ -4812,10 +4858,9 @@ void WriteS19Format(int i)
     SFR[i] = 0;
     UnwrittenBytes = SFL[i];
     Addr = SFA[i];
-    BytesInThisLine = 32;
-    if (UnwrittenBytes < 32) BytesInThisLine = UnwrittenBytes;
     while (UnwrittenBytes > 0)
     {
+       BytesInThisLine = UnwrittenBytes < 32 ? UnwrittenBytes : 32;
        WriteS19Line(bf, "S1", BytesInThisLine, Addr, &ROM[Addr]);
        ++SFR[i];
        Addr += BytesInThisLine;
@@ -4897,7 +4942,15 @@ int main(int argc, char *argv[])
       else if (!strcmp(argv[ic],"-y")) Symbols    = 1;
       else if (!strcmp(argv[ic],"-p")) Preprocess = 1;
       else if (!strcmp(argv[ic],"-q")) Quiet      = 1;
-      else if (!strncmp(argv[ic],"-I",2)) DefineIncludePath(argv[++ic]);
+      else if (!strncmp(argv[ic],"-I",2))
+      {
+         if (++ic == argc)
+         {
+            fprintf(stderr, "Missing value for -I\n");
+            exit(1);
+         }
+         DefineIncludePath(argv[ic]);
+      }
       else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,'D');
       else if (!strncmp(argv[ic],"-l",2))
       {
@@ -4915,7 +4968,7 @@ int main(int argc, char *argv[])
          }
          memset(ROM,Preset,sizeof(ROM));
       }
-      else if (argsrc == NULL && (argv[ic][0] >= '0' || argv[ic][0] == '.'))
+      else if (argsrc == NULL && argv[ic][0] != '-')
       {
          argsrc = argv[ic];
       }
@@ -5020,7 +5073,7 @@ int main(int argc, char *argv[])
    {
       printf("* -d:%s  -i:%s  -n:%s  -o:%s  -x:%s  *\n",
             Stat(Debug),Stat(IgnoreCase),Stat(WithLiNo),
-            Stat(Optimize),Stat(SkipHex));
+            Stat(!Optimize),Stat(SkipHex));
       printf("*******************************************\n");
       printf("* Source Lines: %6d                    *\n",TotalLiNo);
       printf("* Symbols     : %6d                    *\n",Labels);
