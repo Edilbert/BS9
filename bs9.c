@@ -3247,9 +3247,12 @@ int PostIndexReg(int reg,char *p)
 int PostIndexW(int reg,char *p)
 {
    int r;
-   if (df) fprintf(df,"PostIndexW [%c]\n",*p);
-   if (*p == 'w' || *p == 'W') r = 0xf;
-   else                        r = PostIndex(reg,p);
+   if (*p == 'w' || *p == 'W')
+   {
+      if (CPU == 6309) r = 0xf;
+      else OperandError(p);
+   }
+   else r = PostIndex(reg,p);
    return r;
 }
 
@@ -3375,9 +3378,7 @@ int SetPostByte(char *p, int *v)
    {
       while (*(++p) == '-') ++dec;
       reg = PostIndexW(reg,p);
-      if (df) fprintf(df,"zero offset reg=%2.2x\n",reg);
       while (*(++p) == '+') ++inc;
-      if (df) fprintf(df, "Pre - (%d) and Post + (%d)\n",dec,inc);
       if (reg <  0) OperandError(p);
            if (inc == 1 && dec == 0) amo = 0x00;
       else if (inc == 2 && dec == 0) amo = 0x01;
@@ -3385,17 +3386,17 @@ int SetPostByte(char *p, int *v)
       else if (inc == 0 && dec == 2) amo = 0x03;
       else if (inc == 0 && dec == 0) amo = 0x04;
       else OperandError(p);
-      ql = 0; // no address
-      if (reg == 0xf) // W register
+      if (*p) OperandError(p); // junk after operand
+      ql = 0;                  // no address
+      if (reg == 0xf)          // W register
       {
               if (amo == 4) reg = 0x8f; // ,W
          else if (amo == 1) reg = 0xcf; // ,W++
          else if (amo == 3) reg = 0xef; // ,--W
          else OperandError(p);
-         if (df) fprintf(df,"W pb = %2.2x ind = %2.2x\n",reg,ind);
+         if (ind) ++reg;
          return reg;
       }
-      if (*p) OperandError(p);
       if (ind && (inc == 1 || dec == 1)) OperandError(p);
       return (0x80 | reg | ind | amo);
    }
