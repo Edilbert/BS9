@@ -1953,26 +1953,27 @@ void ExpressionOverflow(char *p)
 int op_div(int l, int r, char *p)
 {
    if (r == 0) ErrorExit("Division by zero\n",p);
+   if (l == INT_MIN && r == -1) ExpressionOverflow(p);
    return l / r;
 }
 
 int op_mul(int l, int r, char *p)
 {
-   long long t = l * r;
+   long long t = (long long)l * r;
    if (t < INT_MIN || t > INT_MAX) ExpressionOverflow(p);
    return l * r;
 }
 
 int op_add(int l, int r, char *p)
 {
-   long long t = l + r;
+   long long t = (long long)l + r;
    if (t < INT_MIN || t > INT_MAX) ExpressionOverflow(p);
    return l + r;
 }
 
 int op_sub(int l, int r, char *p)
 {
-   long long t = l - r;
+   long long t = (long long)l - r;
    if (t < INT_MIN || t > INT_MAX) ExpressionOverflow(p);
    return l - r;
 }
@@ -2407,6 +2408,19 @@ char *ParseStoreData(char *p)
       } else p = EndPtr;
    } else p = EndPtr;
 
+   if (Start + Length > 0x10000)
+   {
+      ErrorMsg("STORE range exceeds 64 KB: %4.4x + %d\n",Start,Length);
+      ErrorLine(p);
+      exit(1);
+   }
+   if (StoreCount >= SFMAX)
+   {
+      ErrorMsg("Too many STORE commands (max. %d)\n",SFMAX);
+      ErrorLine(p);
+      exit(1);
+   }
+
    SFA[StoreCount] = Start;
    SFL[StoreCount] = Length;
    SFE[StoreCount] = Entry;
@@ -2420,13 +2434,7 @@ char *ParseStoreData(char *p)
       else if (FileFormat == SRECORD) fprintf(df,"SRECORD\n");
       else                            fprintf(df,"BINARY\n");
    }
-   if (StoreCount < SFMAX) ++StoreCount;
-   else
-   {
-      ErrorMsg("number of storage files exceeds %d\n",SFMAX);
-      ErrorLine(p);
-      exit(1);
-   }
+   ++StoreCount;
    PrintLine();
    p += strlen(p);
    return p;
@@ -3318,6 +3326,7 @@ int SetPostByte(char *p, int *v)
 
    if (toupper(p[0]) == 'E' && p[1] == ',')
    {
+      if (CPU != 6309) OperandError(p);   // E,R: 6309 only
       reg = PostIndexReg(reg,p+2);
       ql = 0;
       return (0x80 | reg | ind | 0x07);
@@ -3327,6 +3336,7 @@ int SetPostByte(char *p, int *v)
 
    if (toupper(p[0]) == 'F' && p[1] == ',')
    {
+      if (CPU != 6309) OperandError(p);   // F,R: 6309 only
       reg = PostIndexReg(reg,p+2);
       ql = 0;
       return (0x80 | reg | ind | 0x0a);
@@ -3336,6 +3346,7 @@ int SetPostByte(char *p, int *v)
 
    if (toupper(p[0]) == 'W' && p[1] == ',')
    {
+      if (CPU != 6309) OperandError(p);   // W,R: 6309 only
       reg = PostIndexReg(reg,p+2);
       ql = 0;
       return (0x80 | reg | ind | 0x0e);
