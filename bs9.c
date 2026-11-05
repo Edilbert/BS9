@@ -3686,6 +3686,7 @@ char *GenerateCode(char *p)
          l = strlen(OpText);
          for (i=0 ; i < l ; ++i)
          if (OpText[i] != '-') break;
+         if (i >= 10) ErrorExit("Illegal - label\n",OpText);
          if (i == l) v = minlab[l];
          else
          {
@@ -3698,6 +3699,7 @@ char *GenerateCode(char *p)
          l = strlen(OpText);
          for (i=0 ; i < l ; ++i)
          if (OpText[i] != '+') break;
+         if (i >= 10) ErrorExit("Illegal + label\n",OpText);
          if (i == l)
          {
             v = UNDEF;
@@ -4456,6 +4458,7 @@ void ParseLine(char *cp)
       l = strlen(cp);
       i = 0;
       while (*cp++ == '-' && i < 10 && i < l) ++i;
+      if (i >= 10) ErrorExit("too many - labels\n",cp);
       minlab[i] = pc;
    }
 
@@ -4466,6 +4469,8 @@ void ParseLine(char *cp)
       l = strlen(cp);
       i = 0;
       while (*cp++ == '+' && i < 10 && i < l) ++i;
+      if (i >= 10) ErrorExit("too many + labels\n",cp);
+
       if (Pass)
       {
          plulab[i][plucnt[i]] = pc;
