@@ -4469,7 +4469,7 @@ void ParseLine(char *cp)
    if (*cp == '.' || *cp == '_' || isalpha(*cp)) // Macro, Label or mnemonic
    {
       mp = StrMatch(cp,"MACRO");
-      if (mp && !isalnum(*(mp+5)))
+      if (mp && !isalnum(*(mp+5)) && (mp == cp || !isalnum(*(mp-1))))
       {
          RecordMacro(cp);
          return;
