@@ -373,6 +373,15 @@ char *ExtractOpText(char *);
 char *EvalOperand(char *, int *, int);
 char *ExtractValue(char *, int *);
 
+#define ML 256
+char Line[ML+ML];            // source line
+
+void GetLine(FILE *f)
+{
+   fgets(Line,sizeof(Line),f);
+   if (strlen(Line) >= ML) ErrorExit("Line too long\n",Line);
+}
+
 // store code or data into ROM array
 
 // *******
@@ -887,10 +896,8 @@ struct IncludeStackStruct
 
 int IncludeLevel;
 
-#define ML 256
 
 int ArgPtr[10];              // macro argument pointer
-char Line[ML];               // source line
 char Label[ML];              // current label
 char MacArgs[ML];            // macro arguments
 unsigned char Operand[ML];   // binary operand
@@ -2717,7 +2724,11 @@ char *ParseByteData(char *p)
       }
       if (CodeStyle == 1 && *p == ' ') break;
       p = SkipToComma(p);
-      if (*p == ',') ++p;
+      if (*p == ',')
+      {
+          ++p;
+          if (*p == 0) ErrorExit("Missing data after comma\n",p);
+      }
    }
    if (l < 1) ErrorExit("Missing byte data\n",p);
    j = AddressIndex(pc);
@@ -4230,7 +4241,7 @@ void RecordMacro(char *p)
       Mac[j].Name = (char *)StrNDup(Macro,l);
       Mac[j].Narg = an;
       Mac[j].Type = mf;
-      fgets(Line,sizeof(Line),sf);
+      GetLine(sf);
       while (!feof(sf) && !StrCaseStr(Line,"ENDM"))
       {
          ++LiNo;
@@ -4278,7 +4289,7 @@ void RecordMacro(char *p)
             Mac[j].Body = (char *)ReallocOrDie(Mac[j].Body,bl);
             strcat(Mac[j].Body,Buf);
          }
-         fgets(Line,sizeof(Line),sf);
+         GetLine(sf);
       }
       Macros++;
       if (df) fprintf(df,"finished macro %d\n",Macros);
@@ -4290,7 +4301,7 @@ void RecordMacro(char *p)
       if (ListOn && !Pass) fprintf(lf,"            %s\n",Line);
       do
       {
-         fgets(Line,sizeof(Line),sf);
+         GetLine(sf);
          if (!Pass)
          {
             PrintLiNo();
@@ -4552,7 +4563,7 @@ int CloseInclude(void)
    free(IncludeStack[IncludeLevel].Src);
    sf = IncludeStack[--IncludeLevel].fp;
    LiNo = IncludeStack[IncludeLevel].LiNo;
-   fgets(Line,sizeof(Line),sf);
+   GetLine(sf);
    ForcedEnd = 0;
    return feof(sf);
 }
@@ -4572,7 +4583,7 @@ void Phase1(void)
    for (i=0 ; i < 11 ; ++i) minlab[i] = UNDEF;
 
    rewind(sf);
-   fgets(Line,sizeof(Line),sf);
+   GetLine(sf);
    Eof = feof(sf);
    while (!Eof || IncludeLevel > 0)
    {
@@ -4588,7 +4599,7 @@ void Phase1(void)
       }
       else
       {
-         fgets(Line,sizeof(Line),sf);
+         GetLine(sf);
       }
       Eof = feof(sf) || ForcedEnd;;
       if (Eof && IncludeLevel > 0) Eof = CloseInclude();
@@ -4624,7 +4635,7 @@ void Phase2(void)
    }
    rewind(sf);
    LiNo = 0; TotalLiNo = 0;
-   fgets(Line,sizeof(Line),sf);
+   GetLine(sf);
    Eof = feof(sf);
    while (!Eof || IncludeLevel > 0)
    {
@@ -4640,7 +4651,7 @@ void Phase2(void)
       }
       else
       {
-         fgets(Line,sizeof(Line),sf);
+         GetLine(sf);
          ListOn = ListGlobal;
       }
       Eof = feof(sf) || ForcedEnd;
