@@ -2680,6 +2680,7 @@ char *ParseByteData(char *p)
    {
       if (CodeStyle == 1 && *p == ' ') break;
       else p = SkipSpace(p);
+      if (*p == ',') ErrorExit("Missing data item\n",p);
       Delimiter = *p;
       if (!strncmp(p,"$DATE",5))
       {
@@ -2692,12 +2693,6 @@ char *ParseByteData(char *p)
       {
          i = l; // remember start of string
          p = ParseASCII(p,ByteBuffer,&l);
-         if (df)
-         {
-            fprintf(df,"String $%4.4x:<",pc);
-            for (j=i ; j < l ; ++j) fprintf(df,"%c",ByteBuffer[j]&0x7f);
-            fprintf(df,"> [%d]\n",l-i);
-         }
       }
       else if (Delimiter == '#' && p[1] == '"' && p[5] == '"') // Hashed ASCII
       {
