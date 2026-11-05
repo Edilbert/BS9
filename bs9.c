@@ -4386,6 +4386,7 @@ void ParseLine(char *cp)
 {
    int i,l,v,m;
    char *start;
+   char *mp;
 
    am = -1;
    oc = -1;
@@ -4467,7 +4468,8 @@ void ParseLine(char *cp)
    if (!cp) return;      // Pseudo Op successfull processed
    if (*cp == '.' || *cp == '_' || isalpha(*cp)) // Macro, Label or mnemonic
    {
-      if (StrMatch(cp,"MACRO"))
+      mp = StrMatch(cp,"MACRO");
+      if (mp && !isalnum(*(mp+5)))
       {
          RecordMacro(cp);
          return;
