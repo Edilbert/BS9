@@ -2176,6 +2176,7 @@ char *ParseWordData(char *p)
       ByteBuffer[l++] = v;
       p = SkipToComma(p);
       if (*p == ',') ++p;
+      if (l >= ML) ErrorExit("Too many items\n",p);
    }
    if (l < 1) ErrorExit("Missing WORD data\n",p);
    j = AddressIndex(pc);
@@ -2216,6 +2217,7 @@ char *ParseLongData(char *p)
    p = SkipSpace(p);
    while (*p && *p != ';') // Parse data line
    {
+      if (l >= ML-4) ErrorExit("Too many items\n",p);
       p = EvalOperand(p,&v,0);
       ByteBuffer[l++] = v >> 24;
       ByteBuffer[l++] = v >> 16;
@@ -2673,6 +2675,7 @@ char *ParseByteData(char *p)
 
    p = SkipSpace(p);
    l = 0;
+   if (strlen(p) >= ML) ErrorExit("Too many items\n",p);
    while (*p && *p != ';') // Parse data line
    {
       if (CodeStyle == 1 && *p == ' ') break;
@@ -2680,6 +2683,7 @@ char *ParseByteData(char *p)
       Delimiter = *p;
       if (!strncmp(p,"$DATE",5))
       {
+         if ((l + strlen(datebuffer)) >= ML) ErrorExit("Too many items\n",p);
          strcpy((char *)ByteBuffer+l,datebuffer);
          l += strlen(datebuffer);
          p += 5;
