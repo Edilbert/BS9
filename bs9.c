@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 04-Nov-2026
+Version: 06-Nov-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -828,7 +828,7 @@ int ForcedHex  =  0; // used for BHEX pseudo
 
 #define MAXPASS 10
 int MaxPass=MAXPASS;
-int Pass;            // pass counter
+int Pass;            // pass counter (0 = last pass stores code)
 int Changes;         // label address changes
 int Unresolved;      // pass 1 counter
 
@@ -849,14 +849,6 @@ int ForcedEnd;       // Triggered by END command
 int IgnoreCase;      // 1: Ignore case for symbols
 int ForcedMode;      // -1: direct page, +1: extended
 int Preset;          // value for initialisation
-
-// local labels
-
-#define PLUMAX 200
-
-int minlab[11];
-int plucnt[11];
-int plulab[11][PLUMAX];
 
 // Filenames
 
@@ -1017,7 +1009,8 @@ int isym(char c)
 
 char *GetSymbol(char *p, char *s)
 {
-   if (*p == '.') // expand local symbol
+   char pm = *p;
+   if (pm == '.') // expand local symbol
    {
       if (Scope[0])
       {
@@ -1025,8 +1018,19 @@ char *GetSymbol(char *p, char *s)
          s += strlen(s);
          *s++ = *p++;
       }
+      if (*p == '_' || isalpha(*p)) while (isym(*p)) *s++ = *p++;
    }
-   if (*p == '_' || isalpha(*p)) while (isym(*p)) *s++ = *p++;
+   else if (pm == '+' || pm == '-') // expand + - symbol
+   {
+      if (Scope[0])
+      {
+         strcpy(s,Scope);
+         s += strlen(s);
+         *s++ = *p++;
+      }
+      while (*p == pm) *s++ = *p++;
+   }
+   else if (*p == '_' || isalpha(*p)) while (isym(*p)) *s++ = *p++;
    *s = 0;
    return p;
 }
@@ -2059,7 +2063,6 @@ char *EvalOperand(char *p, int *v, int prio)
 
    p = SkipSpace(p);
    c = *p;
-   if (df) fprintf(df,"Eval <%s>",p);
 
    if (c == ',' )  return p; // comma separator
 
@@ -3514,6 +3517,21 @@ int ScanPushList(char *p)
    return v;
 }
 
+char *AllPM(char *p, int *v)
+{
+   char lab[11];
+   char pm;
+   int i = 0;
+   p = SkipSpace(p);
+   pm = *p;
+   if (pm == '+' || pm == '-')
+      while (*p == pm && i < 10) lab[i++] = *p++;
+   lab[i] = 0;
+   p = SkipSpace(p);
+   if (*p) return NULL; // not a plus minus label
+   EvalSymValue(lab,v);    // symbol or label
+   return p;
+}
 
 char *GenerateCode(char *p)
 {
@@ -3681,33 +3699,7 @@ char *GenerateCode(char *p)
          il = 3;
       }
 
-      if (OpText[0] == '-') // local backward label
-      {
-         l = strlen(OpText);
-         for (i=0 ; i < l ; ++i)
-         if (OpText[i] != '-') break;
-         if (i >= 10) ErrorExit("Illegal - label\n",OpText);
-         if (i == l) v = minlab[l];
-         else
-         {
-            rop = EvalOperand(OpText,&v,0);
-            if (*rop) ErrorExit("Extra text after branch operand\n",rop);
-         }
-      }
-      else if (OpText[0] == '+') // local forward label
-      {
-         l = strlen(OpText);
-         for (i=0 ; i < l ; ++i)
-         if (OpText[i] != '+') break;
-         if (i >= 10) ErrorExit("Illegal + label\n",OpText);
-         if (i == l)
-         {
-            v = UNDEF;
-            i = plucnt[l];
-            while (--i >= 0 && plulab[l][i] > pc) v = plulab[l][i];
-         }
-         else EvalOperand(OpText,&v,0);
-      }
+      if (AllPM(OpText,&v));
       else EvalOperand(OpText,&v,0);
       relv = v;
       if (v != UNDEF) relv -= (pc + il);
@@ -4451,32 +4443,11 @@ void ParseLine(char *cp)
       }
    }
 
-   // set local backward label
+   // set local label + ++ - -- etc.
 
-   if (*cp == '-')
+   if (*cp == '-' || *cp == '+')
    {
-      l = strlen(cp);
-      i = 0;
-      while (*cp++ == '-' && i < 10 && i < l) ++i;
-      if (i >= 10) ErrorExit("too many - labels\n",cp);
-      minlab[i] = pc;
-   }
-
-   // set local forward label
-
-   if (*cp == '+')
-   {
-      l = strlen(cp);
-      i = 0;
-      while (*cp++ == '+' && i < 10 && i < l) ++i;
-      if (i >= 10) ErrorExit("too many + labels\n",cp);
-
-      if (Pass)
-      {
-         plulab[i][plucnt[i]] = pc;
-         if (++plucnt[i] > PLUMAX-2)
-            ErrorExit("too many local labels\n",cp);
-      }
+      cp = DefineLabel(cp,&v,' ');
    }
 
    cp = CheckPseudo(cp);
@@ -4585,8 +4556,6 @@ void Phase1(void)
    LiNo      = 0;
    TotalLiNo = 0;
 
-   for (i=0 ; i < 11 ; ++i) minlab[i] = UNDEF;
-
    rewind(sf);
    GetLine(sf);
    Eof = feof(sf);
@@ -4626,8 +4595,6 @@ void Phase2(void)
    RegisterNames = Register_6309;
    Scope[0]  =    0;
    ModuleStart =  0;
-
-   for (i=0 ; i < 11 ; ++i) minlab[i] = UNDEF;
 
    if (IfLevel)
    {
@@ -5040,7 +5007,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 04-Nov-2026         *\n");
+      printf("* Bit Shift Assembler 06-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
