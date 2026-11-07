@@ -4180,8 +4180,8 @@ void RecordMacro(char *p)
                at = args + ap[i];
                al = strlen(at);
                if (al && !StrnCmp(p,at,al)
-               && (p == Line || !isalnum(*(p-1)))
-               && !isalnum(*(p+al)))
+               && (p == Line || !isym(*(p-1)))
+               && !isym(*(p+al)))
                {
                   *b++ = CHAMAC;
                   *b++ = '0' + i;
