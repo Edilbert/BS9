@@ -3549,7 +3549,7 @@ char *GenerateCode(char *p)
       ol  = 2;
       if (*p == ',') ++p;
       else ErrorExit("Immediate value must be followed by comma\n",p);
-      strcpy(OpText,p); // strip immediate value from OpText
+      memmove(OpText,p,strlen(p)+1); // strip immediate value from OpText
       p = OpText;
       v = UNDEF;
    }
@@ -4127,7 +4127,7 @@ void RecordMacro(char *p)
 {
    char Macro[ML];
    int i,j,l,al,an,bl;
-   int ap[10];
+   int ap[MAXARGS+1];
    char args[ML];
    char Buf[ML];
    char *b;
