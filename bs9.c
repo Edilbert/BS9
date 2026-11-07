@@ -235,6 +235,29 @@ Generated Code:
    JMP   [SWI1PT]
 
 Macros accept up to 10 parameter and may have any length.
+The macro call replaces all occurences of the dummy parameter in the
+definition with the actual parameter if following conditions are fulfilled:
+The text to be replaced is a word delimited by characters that are not from
+(A-Z,a-z,0-9,_,.,$) which are allowed in identifiers.
+Example:
+
+MACRO LDBOTH (A,B)
+  LDA #A
+  LDB #B
+ENDM
+
+called as
+
+LDBOTH(3,4)
+
+expands to
+
+   LDA #3
+   LDB #4
+
+Notice, that the 'A' in LDA and 'B' in LDB is unaffected.
+
+The replacement replaces matching text in strings and comments too!
 
 MACLIST ON  : List expanded macro code lines
 MACLIST OFF : Do not list expanded macro code lines
@@ -372,7 +395,7 @@ void ErrorExit(const char *msg, char *ptr);
 char *ExtractOpText(char *);
 char *EvalOperand(char *, int *, int);
 char *ExtractValue(char *, int *);
-
+void OperandError(char *);
 #define ML 256
 char Line[ML+ML];            // source line
 
@@ -1902,6 +1925,7 @@ char *op_par(char *p, int *v)
 
 char *op_plu(char *p, int *v) { p = EvalOperand(p+1,v,12); return p; }
 char *op_min(char *p, int *v) { p = EvalOperand(p+1,v,12);
+                              if (*v == INT_MIN) OperandError(p);
                               if (*v != UNDEF) *v = -(*v); return p; }
 char *op_lno(char *p, int *v) { p = EvalOperand(p+1,v,12);
                               if (*v != UNDEF) *v = !(*v); return p; }
@@ -4068,6 +4092,20 @@ char *GenerateCode(char *p)
    return p;
 }
 
+// check for duplicates in argment list
+
+void CheckArguments(char *args, int ptr[], int nargs)
+{
+   int i,j;
+
+   for (i=0   ; i < nargs ; ++i)
+   for (j=i+1 ; j < nargs ; ++j)
+   {
+      if (!strcmp(args+ptr[i],args+ptr[j]))
+         ErrorExit("Duplicate macro parameter\n",args+ptr[i]);
+   }
+}
+
 
 // *************
 // ScanArguments
@@ -4149,7 +4187,11 @@ void RecordMacro(char *p)
    if (l == 0) ErrorExit("Unnamed macro\n",pe);
    p = SkipSpace(p);
 
-   if (*p == '(') an = ScanArguments(p+1,args,ap,MAXARGS+1);
+   if (*p == '(')
+   {
+      an = ScanArguments(p+1,args,ap,MAXARGS+1);
+      CheckArguments(args,ap,an);
+   }
    else if (*p == 0) an = 0;
    else ErrorExit("Macro syntax error D\n",p);
 
