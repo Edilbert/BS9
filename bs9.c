@@ -2724,9 +2724,8 @@ char *ParseByteData(char *p)
       else if (Delimiter == '#' && p[1] == '"' && p[5] == '"') // Hashed ASCII
       {
          v = p[4]-64 + 27 * (p[3]-64 + 27 * (p[2]-64));
-         ByteBuffer[0] = v >> 8;   // big endian
-         ByteBuffer[1] = v & 0xff;
-         l  = 2;
+         ByteBuffer[l++] = v >> 8;   // big endian
+         ByteBuffer[l++] = v & 0xff;
          p += 6;
       }
       else
