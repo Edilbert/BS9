@@ -1155,10 +1155,15 @@ void ListSymbols(FILE *lf, int n, int lb, int ub);
 void ErrorMsg(const char *format, ...) {
    va_list args;
    char *buf;
+   char *file;
 
+   file = IncludeStack[IncludeLevel].Src;
    buf = (char *)MallocOrDie(SIZE_ERRMSG);
+   if (file)
    snprintf(buf, SIZE_ERRMSG, "\n*** Error in file %s line %d:\n",
-         IncludeStack[IncludeLevel].Src, LiNo);
+         file, LiNo);
+   else
+   snprintf(buf, SIZE_ERRMSG, "\n*** Error in line %d:\n",LiNo);
    va_start(args,format);
    vsnprintf(buf+strlen(buf), SIZE_ERRMSG-strlen(buf), format, args);
    va_end(args);
@@ -4068,7 +4073,7 @@ char *GenerateCode(char *p)
 // ScanArguments
 // *************
 
-// for nargs == MAXARGS this is a recording call
+// for nargs == MAXARGS+1 this is a recording call
 // otherwise it's an expansion call
 
 int ScanArguments(char *p, char *args, int ptr[], int nargs)
@@ -4083,8 +4088,8 @@ int ScanArguments(char *p, char *args, int ptr[], int nargs)
    {
       if (*p == ')' || *p == ',' || *p == 0)
          ErrorExit("Missing macro parameter\n",p);
-      if (nargs == MAXARGS) p = GetSymbol(p,sym);    // dummy   parameter
-      else                  p = GetMacroArg(p,sym);  // current parameter
+      if (nargs == MAXARGS+1) p = GetSymbol(p,sym);    // dummy   parameter
+      else                    p = GetMacroArg(p,sym);  // current parameter
       l = strlen(sym);
       if (l) memmove(args+ptr[n],sym,l+1);
       else   args[ptr[n]] = 0;
@@ -4143,7 +4148,7 @@ void RecordMacro(char *p)
    l = strlen(Macro);
    p = SkipSpace(p);
 
-   if (*p == '(') an = ScanArguments(p+1,args,ap,MAXARGS);
+   if (*p == '(') an = ScanArguments(p+1,args,ap,MAXARGS+1);
    else if (*p == 0) an = 0;
    else ErrorExit("Macro syntax error D\n",p);
 
@@ -4160,6 +4165,8 @@ void RecordMacro(char *p)
          l = strlen(Line);
          if (l && Line[l-1] == 10) Line[--l] = 0; // Remove linefeed
          if (l && Line[l-1] == 13) Line[--l] = 0; // Remove return
+         p = strchr(Line,CHAMAC);
+         if (p) ErrorExit("Illegal character ` in macro declaration",p);
 
          // parse line and substitute arguments
 
