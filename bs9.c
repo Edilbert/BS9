@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 06-Nov-2026
+Version: 07-Nov-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -1009,8 +1009,7 @@ int isym(char c)
 
 char *GetSymbol(char *p, char *s)
 {
-   char pm = *p;
-   if (pm == '.') // expand local symbol
+   if (*p == '.') // expand local symbol
    {
       if (Scope[0])
       {
@@ -1018,19 +1017,8 @@ char *GetSymbol(char *p, char *s)
          s += strlen(s);
          *s++ = *p++;
       }
-      if (*p == '_' || isalpha(*p)) while (isym(*p)) *s++ = *p++;
    }
-   else if (pm == '+' || pm == '-') // expand + - symbol
-   {
-      if (Scope[0])
-      {
-         strcpy(s,Scope);
-         s += strlen(s);
-         *s++ = *p++;
-      }
-      while (*p == pm) *s++ = *p++;
-   }
-   else if (*p == '_' || isalpha(*p)) while (isym(*p)) *s++ = *p++;
+   if (*p == '_' || isalpha(*p)) while (isym(*p)) *s++ = *p++;
    *s = 0;
    return p;
 }
@@ -3517,22 +3505,6 @@ int ScanPushList(char *p)
    return v;
 }
 
-char *AllPM(char *p, int *v)
-{
-   char lab[11];
-   char pm;
-   int i = 0;
-   p = SkipSpace(p);
-   pm = *p;
-   if (pm == '+' || pm == '-')
-      while (*p == pm && i < 10) lab[i++] = *p++;
-   lab[i] = 0;
-   p = SkipSpace(p);
-   if (*p) return NULL; // not a plus minus label
-   EvalSymValue(lab,v);    // symbol or label
-   return p;
-}
-
 char *GenerateCode(char *p)
 {
    int ibi = 0; // instruction byte index
@@ -3699,8 +3671,7 @@ char *GenerateCode(char *p)
          il = 3;
       }
 
-      if (AllPM(OpText,&v));
-      else EvalOperand(OpText,&v,0);
+      EvalOperand(OpText,&v,0);
       relv = v;
       if (v != UNDEF) relv -= (pc + il);
       else if (Pass == 1) ++Unresolved;
@@ -4443,11 +4414,11 @@ void ParseLine(char *cp)
       }
    }
 
-   // set local label + ++ - -- etc.
+   // reject local label + ++ - -- etc.
 
    if (*cp == '-' || *cp == '+')
    {
-      cp = DefineLabel(cp,&v,' ');
+      ErrorExit("No support for labels + ++ - --\n",cp);
    }
 
    cp = CheckPseudo(cp);
@@ -5007,7 +4978,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 06-Nov-2026         *\n");
+      printf("* Bit Shift Assembler 07-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
