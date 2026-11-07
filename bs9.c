@@ -4088,14 +4088,19 @@ int ScanArguments(char *p, char *args, int ptr[], int nargs)
       l = strlen(sym);
       if (l) memmove(args+ptr[n],sym,l+1);
       else   args[ptr[n]] = 0;
-      if (++n > nargs) ErrorExit("Too many macro parameter\n",p);
+      ++n;
+      if (n > nargs+1 || n > MAXARGS) ErrorExit("Too many macro parameter\n",p);
       ptr[n] = ptr[n-1] + l + 1;
       p = SkipSpace(p);
-      if (*p != ',' && *p != ')') ErrorExit("Macro syntax error A\n",p);
-      if (*p == ',') p = SkipSpace(p+1);
+      if (*p != ',' && *p != ')') ErrorExit("Macro argument error\n",p);
+      if (*p == ',')
+      {
+         p = SkipSpace(p+1);
+         if (*p == ')') ErrorExit("Missing parameter\n",p);
+      }
    }
    p = SkipSpace(p+1);
-   if (*p) ErrorExit("Macro syntax errorB\n",p);
+   if (*p) ErrorExit("Macro junk error\n",p);
    return n;
 }
 
@@ -4192,6 +4197,7 @@ void RecordMacro(char *p)
             strcat(Mac[j].Body,Buf);
          }
          GetLine(sf);
+         if (feof(sf)) ErrorExit("Missing ENDM in macro definition\n",NULL);
       }
       Macros++;
    }
@@ -4213,7 +4219,7 @@ void RecordMacro(char *p)
       } while (!feof(sf) && !StrCaseStr(Line,"ENDM"));
       LiNo-=2;
    }
-   MacroInfo(j);
+   // MacroInfo(j);
    ++LiNo;
 }
 
