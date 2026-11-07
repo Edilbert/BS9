@@ -1925,7 +1925,7 @@ char *op_par(char *p, int *v)
 
 char *op_plu(char *p, int *v) { p = EvalOperand(p+1,v,12); return p; }
 char *op_min(char *p, int *v) { p = EvalOperand(p+1,v,12);
-                              if (*v == INT_MIN) OperandError(p);
+                              if (*v == INT_MIN) ErrorExit("Integer overflow\n",p);
                               if (*v != UNDEF) *v = -(*v); return p; }
 char *op_lno(char *p, int *v) { p = EvalOperand(p+1,v,12);
                               if (*v != UNDEF) *v = !(*v); return p; }
@@ -4255,6 +4255,7 @@ void RecordMacro(char *p)
    }
    else  // Skip macro
    {
+      if (Pass == 1) ErrorExit("Duplicate macro declaration",pe);
       if (!Pass) PrintLiNo();
       ++LiNo;
       if (ListOn && !Pass) fprintf(lf,"            %s\n",Line);
@@ -5019,6 +5020,9 @@ int main(int argc, char *argv[])
    if (fclose(lf)) AssertFileOp(NULL, "Close list file");
    if (yf) if (fclose(yf)) AssertFileOp(NULL, "Close symbol file");
    if (df) if (fclose(df)) AssertFileOp(NULL, "Close debug file");
+
+   for (ic=0 ; ic < Macros ; ++ic) MacroInfo(ic);
+
    if (!Quiet)
    {
       printf("* -d:%s  -i:%s  -n:%s  -o:%s  -x:%s  *\n",
