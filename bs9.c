@@ -4129,7 +4129,7 @@ void RecordMacro(char *p)
    int i,j,l,al,an,bl;
    int ap[MAXARGS+1];
    char args[ML];
-   char Buf[ML];
+   char Buf[ML+ML+2];
    char *b;
    char *at;
    char *pe = p;  // for error messages
@@ -4179,7 +4179,9 @@ void RecordMacro(char *p)
             {
                at = args + ap[i];
                al = strlen(at);
-               if (al && !StrnCmp(p,at,al))
+               if (al && !StrnCmp(p,at,al)
+               && (p == Line || !isalnum(*(p-1)))
+               && !isalnum(*(p+al)))
                {
                   *b++ = CHAMAC;
                   *b++ = '0' + i;
