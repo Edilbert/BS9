@@ -4255,7 +4255,7 @@ void RecordMacro(char *p)
    }
    else  // Skip macro
    {
-      if (Pass == 1) ErrorExit("Duplicate macro declaration",pe);
+      if (Pass == 1) ErrorExit("Duplicate macro declaration\n",pe);
       if (!Pass) PrintLiNo();
       ++LiNo;
       if (ListOn && !Pass) fprintf(lf,"            %s\n",Line);
@@ -5020,8 +5020,6 @@ int main(int argc, char *argv[])
    if (fclose(lf)) AssertFileOp(NULL, "Close list file");
    if (yf) if (fclose(yf)) AssertFileOp(NULL, "Close symbol file");
    if (df) if (fclose(df)) AssertFileOp(NULL, "Close debug file");
-
-   for (ic=0 ; ic < Macros ; ++ic) MacroInfo(ic);
 
    if (!Quiet)
    {
