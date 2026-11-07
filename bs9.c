@@ -889,7 +889,8 @@ struct IncludeStackStruct
 int IncludeLevel;
 
 
-int ArgPtr[10];              // macro argument pointer
+#define MAXARGS 10
+int ArgPtr[MAXARGS+1];       // macro argument pointer
 char Label[ML];              // current label
 char MacArgs[ML];            // macro arguments
 unsigned char Operand[ML];   // binary operand
@@ -4067,7 +4068,6 @@ char *GenerateCode(char *p)
    return p;
 }
 
-#define MAXARGS 10
 
 // *************
 // ScanArguments
@@ -4146,6 +4146,7 @@ void RecordMacro(char *p)
    p = NextSymbol(p,Macro);
    if (*p == 0) ErrorExit("Macro syntax error c\n",pe);
    l = strlen(Macro);
+   if (l == 0) ErrorExit("Unnamed macro\n",pe);
    p = SkipSpace(p);
 
    if (*p == '(') an = ScanArguments(p+1,args,ap,MAXARGS+1);
