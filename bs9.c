@@ -935,7 +935,6 @@ struct MacroStruct
    char *Body;  // "Line1\nLine2\n ... LastLine\n"
    int  Narg;   // # of macro arguments (0-10)
    int  Cola;   // column of macro definition (for pretty printing)
-   int  Type;   // 0: name(arg1,arg2))  1: name arg1,arg2
 } Mac[MAXMAC];
 
 char *MacPtr[MAXMAC]; // pointer inside macro body
@@ -4077,72 +4076,37 @@ int ScanArguments(char *p, char *args, int ptr[], int nargs)
    int l,n;
    char sym[ML];
 
-   if (df) fprintf(df,"Scan Args %d <%s>\n",nargs,p);
    n = 0;
    ptr[0] = 0;
-   while (*p && n < nargs)
+   p = SkipSpace(p);
+   while (*p != ')')
    {
-      if (df) fprintf(df,"Arg #%d <%s>\n",n,p);
-      p = SkipSpace(p);
-      if (*p == ')') break; // end of list
-      if (nargs == MAXARGS) p = GetSymbol(p,sym);
-      else                  p = GetMacroArg(p,sym);
+      if (*p == ')' || *p == ',' || *p == 0)
+         ErrorExit("Missing macro parameter\n",p);
+      if (nargs == MAXARGS) p = GetSymbol(p,sym);    // dummy   parameter
+      else                  p = GetMacroArg(p,sym);  // current parameter
       l = strlen(sym);
       if (l) memmove(args+ptr[n],sym,l+1);
       else   args[ptr[n]] = 0;
-      ++n;
+      if (++n > nargs) ErrorExit("Too many macro parameter\n",p);
       ptr[n] = ptr[n-1] + l + 1;
       p = SkipSpace(p);
-      if (*p == ')') break; // end of list
-      if (*p != ',' && n < nargs-1 && nargs < MAXARGS)
-      {
-         ++ErrNum;
-         ErrorMsg("Syntax error in macro definition '%c'\n",*p);
-         exit(1);
-      }
-      if (*p == ',') ++p;
+      if (*p != ',' && *p != ')') ErrorExit("Macro syntax error A\n",p);
+      if (*p == ',') p = SkipSpace(p+1);
    }
-   return n;
-}
-
-
-// Called after name MCRO returns # of args
-
-int ScanArgs(char *p, char *args, int ptr[])
-{
-   int l,n;
-   char sym[ML];
-
-   n = 0;
-   ptr[0] = 0;
-   // if (df) fprintf(df,"Inside ScanArgs: <%s>\n",p);
-   while (*p && n < 10)
-   {
-      p = SkipSpace(p);
-      if (*p == ';') break; // comment
-      p = NextSymbol(p,sym);
-      l = strlen(sym);
-      // if (df) fprintf(df,"ScanSym:<%s>[%d]\n",sym,l);
-      if (l) memmove(args+ptr[n],sym,l+1);
-      else   args[ptr[n]] = 0;
-      ++n;
-      ptr[n] = ptr[n-1] + l + 1;
-      p = SkipSpace(p);
-      if (*p != ',') break; // end of list
-      ++p; // skip comma
-   }
+   p = SkipSpace(p+1);
+   if (*p) ErrorExit("Macro syntax errorB\n",p);
    return n;
 }
 
 void MacroInfo(int n)
 {
-   fprintf(df,"-----------------\n");
-   fprintf(df,"Name: %s\n",Mac[n].Name);
-   fprintf(df,"Args: %d\n",Mac[n].Narg);
-   fprintf(df,"Cola: %d\n",Mac[n].Cola);
-   fprintf(df,"Type: %d\n",Mac[n].Type);
-   fprintf(df,"Body: <<<%s>>>\n",Mac[n].Body);
-   fprintf(df,"-----------------\n");
+   printf("-----------------\n");
+   printf("Name: %s\n",Mac[n].Name);
+   printf("Args: %d\n",Mac[n].Narg);
+   printf("Cola: %d\n",Mac[n].Cola);
+   printf("Body: <<<%s>>>\n",Mac[n].Body);
+   printf("-----------------\n");
 }
 
 // ***********
@@ -4152,7 +4116,7 @@ void MacroInfo(int n)
 void RecordMacro(char *p)
 {
    char Macro[ML];
-   int i,j,l,al,an,bl,mf;
+   int i,j,l,al,an,bl;
    int ap[10];
    char args[ML];
    char Buf[ML];
@@ -4168,44 +4132,22 @@ void RecordMacro(char *p)
    }
 
    bl = 1;
-   mf = strcmpword(p,"MACRO") != 0; // 1 : name MACRO
-   if (!mf) p += 5;                 // 0 : MACRO name
-   if (df) fprintf(df,"macro type = %d\n",mf);
 
    p = NextSymbol(p,Macro);
-   if (*p == 0) ErrorExit("Macro Syntax Error\n",pe);
+   if (*p == 0) ErrorExit("Macro syntax error c\n",pe);
    l = strlen(Macro);
-   if (mf) p = StrMatch(p,"MACRO") + 5;
    p = SkipSpace(p);
 
-   if (df)
-   {
-      fprintf(df,"Macro name: <%s>\n",Macro);
-      fprintf(df,"Arglist: <%s>\n",p);
-   }
+   if (*p == '(') an = ScanArguments(p+1,args,ap,MAXARGS);
+   else if (*p == 0) an = 0;
+   else ErrorExit("Macro syntax error D\n",p);
 
-   if (*p == '(') ++p;
-   if (mf) an = ScanArgs(p,args,ap);
-   else    an = ScanArguments(p,args,ap,MAXARGS);
-   if (df)
-   {
-      fprintf(df,"RecordMacro: %s(",Macro);
-      for (i=0 ; i < an ; ++i)
-      {
-         at = args + ap[i];
-         al = strlen(at);
-         fprintf(df,"%s[%d]",at,al);
-         if (i < an-1) fprintf(df,",");
-      }
-      fprintf(df,")\n");
-   }
    j = MacroIndex(Macro);
    if (j < 0)  // create new entry in macro table
    {
       j = Macros;
       Mac[j].Name = (char *)StrNDup(Macro,l);
       Mac[j].Narg = an;
-      Mac[j].Type = mf;
       GetLine(sf);
       while (!feof(sf) && !StrCaseStr(Line,"ENDM"))
       {
@@ -4237,11 +4179,6 @@ void RecordMacro(char *p)
          *b++ = '\n';
          *b = 0;
 
-         if (df)
-         {
-            fprintf(df,"MAC line  :%s\n",Line);
-            fprintf(df,"MAC parsed:%s\n",Buf);
-         }
          l = strlen(Buf);
          if (bl == 1)
          {
@@ -4257,7 +4194,6 @@ void RecordMacro(char *p)
          GetLine(sf);
       }
       Macros++;
-      if (df) fprintf(df,"finished macro %d\n",Macros);
    }
    else  // Skip macro
    {
@@ -4277,7 +4213,7 @@ void RecordMacro(char *p)
       } while (!feof(sf) && !StrCaseStr(Line,"ENDM"));
       LiNo-=2;
    }
-   if (df) MacroInfo(j);
+   MacroInfo(j);
    ++LiNo;
 }
 
@@ -4361,7 +4297,6 @@ void ParseLine(char *cp)
 {
    int i,l,v,m;
    char *start;
-   char *mp;
 
    am = -1;
    oc = -1;
@@ -4423,14 +4358,15 @@ void ParseLine(char *cp)
 
    cp = CheckPseudo(cp);
    if (!cp) return;      // Pseudo Op successfull processed
-   if (*cp == '.' || *cp == '_' || isalpha(*cp)) // Macro, Label or mnemonic
+
+   if (!StrNCaseCmp(cp,"MACRO ",6))     // MACRO definition
    {
-      mp = StrMatch(cp,"MACRO");
-      if (mp && !isym(*(mp+5)) && (mp == cp || !isym(*(mp-1))))
-      {
-         RecordMacro(cp);
-         return;
-      }
+      RecordMacro(cp+6);
+      return;
+   }
+
+   if (*cp == '.' || *cp == '_' || isalpha(*cp)) // Label or mnemonic
+   {
       if ((MneIndex = IsInstruction(cp)) < 0)
       {
          if (DimOp < (int)DIMOP_6309)       // 6309 mnemonic while CPU = 6809 ?
