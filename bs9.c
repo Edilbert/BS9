@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 07-Nov-2026
+Version: 08-Nov-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -2690,6 +2690,11 @@ char *ParseASCII(char *p, unsigned char b[], int *l)
    return p;
 }
 
+void CheckHA(char *p)
+{
+   if (*p < '@' || *p > 'Z') ErrorExit("Illegal character for hashed ASCII\n",p);
+}
+
 // *************
 // ParseByteData
 // *************
@@ -2723,6 +2728,9 @@ char *ParseByteData(char *p)
       }
       else if (Delimiter == '#' && p[1] == '"' && p[5] == '"') // Hashed ASCII
       {
+         CheckHA(p+2);
+         CheckHA(p+3);
+         CheckHA(p+4);
          v = p[4]-64 + 27 * (p[3]-64 + 27 * (p[2]-64));
          ByteBuffer[l++] = v >> 8;   // big endian
          ByteBuffer[l++] = v & 0xff;
@@ -4972,7 +4980,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 07-Nov-2026         *\n");
+      printf("* Bit Shift Assembler 08-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
