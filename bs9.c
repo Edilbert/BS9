@@ -1875,7 +1875,7 @@ char *EvalMultiCharValue(char *p, int *v)
    for (i=0 ; i < 4 ; ++i)
    {
       if (*p == '\"') break;   // end quote
-      *v = (*v << 8) | *p++;
+      *v = (int)((unsigned)*v << 8) | (unsigned char)*p++;
    }
    if (*p == '\"') ++p;        // end quote
    else ErrorExit("Multi character operand too long ( > 4 )\n",p);
@@ -2009,13 +2009,13 @@ int op_sub(int l, int r, char *p)
 int op_asl(int l, int r, char *p)
 {
    if (r < 0 || r > 31) ExpressionOverflow(p);
-   return l << r;
+   return (int)((unsigned)l << r);
 }
 
 int op_lsr(int l, int r, char *p)
 {
    if (r < 0 || r > 31) ExpressionOverflow(p);
-   return l >> r;
+   return l < 0 ? ~(~l >> r) : l >> r;
 }
 
 int op_cle(int l, int r, char *p) { (void)p;return l <= r; }
@@ -4511,7 +4511,7 @@ int CloseInclude(void)
 
 void Phase1(void)
 {
-   int i,l,Eof;
+   int l,Eof;
 
    ForcedEnd = 0;
    Changes   = 0;
@@ -4548,7 +4548,7 @@ void Phase1(void)
 
 void Phase2(void)
 {
-   int i,l,Eof;
+   int l,Eof;
 
    pc        =   -1;
    bss       =   -1;
