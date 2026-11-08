@@ -1802,15 +1802,20 @@ char *ParseRealData(char *p, int ldq)
 char *EvalHexValue(char *p, int *v)
 {
    char *EndPtr;
-   long long lol;
-   lol = strtoll(p,&EndPtr,16);
-   *v = lol & 0xffffffff;
+   unsigned long long u;
+
+   if (!isxdigit((unsigned char)*p))          // kein Vorzeichen, kein Leerraum
+      ErrorExit("Illegal hex constant\n",p);
+   u = strtoull(p,&EndPtr,16);                // bei Überlauf: ULLONG_MAX
+   if (u > 0xffffffffULL) ErrorExit("Hex constant exceeds 32 bits\n",p);
+   *v = (int)(unsigned)u;
    return EndPtr;
 }
 
 char *EvalDecValue(char *p, int *v)
 {
    int i;
+   unsigned long long u = 0;
 
    // check for xxxxH or xxxxh hex syntax;
 
@@ -1824,9 +1829,15 @@ char *EvalDecValue(char *p, int *v)
 
    // check for decimal value
 
-   *v = atoi(p);
-   while (isdigit(*p)) ++p;
+   while (isdigit((unsigned char)*p))
+   {
+      u = u*10 + (*p++ - '0');
+      if (u > 0xffffffffULL) ErrorExit("Decimal constant exceeds 32 bits\n",p);
+   }
+   *v = (int)(unsigned)u;
+
    if (!isalpha(*p)) return p;
+
    if ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f'))
       ErrorExit("Wrong decimal constant or leading $ for hex missing\n",p);
    else
@@ -1886,12 +1897,15 @@ char *EvalMultiCharValue(char *p, int *v)
 
 char *EvalBinValue(char *p, int *v)
 {
-   int r;
-   r = 0;
+   unsigned r = 0; int n = 0;
    while(*p == ' ' || *p == '1' || *p == '0' || *p == '*' || *p == '.')
    {
-      if (*p == '1' || *p == '*') r = (r << 1) + 1;
-      if (*p == '0' || *p == '.') r <<= 1;
+      if (*p != ' ')
+      {
+         if (++n > 32) ErrorExit("Binary constant exceeds 32 bits\n",p);
+         if (*p == '1' || *p == '*') r = (r << 1) + 1;
+         else                        r <<= 1;
+      }
       ++p;
    }
    *v = r;
