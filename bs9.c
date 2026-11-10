@@ -1819,12 +1819,13 @@ char *EvalHexValue(char *p, int *v)
 {
    char *EndPtr;
    unsigned long long u;
-
-   if (!isxdigit((unsigned char)*p))          // kein Vorzeichen, kein Leerraum
+   if (!isxdigit((unsigned char)*p))          // no space or sign allowed
       ErrorExit("Illegal hex constant\n",p);
-   u = strtoull(p,&EndPtr,16);                // bei Überlauf: ULLONG_MAX
+   u = strtoull(p,&EndPtr,16);                // overflow: ULLONG_MAX
    if (u > 0xffffffffULL) ErrorExit("Hex constant exceeds 32 bits\n",p);
    *v = (int)(unsigned)u;
+   if (*EndPtr == '.' || isalpha(*EndPtr))
+      ErrorExit("Illegal character after hex constant\n",EndPtr);
    return EndPtr;
 }
 
@@ -2542,10 +2543,9 @@ char *ParseLoadData(char *p)
    EndPtr = ++p;
    while (*EndPtr != '\0' && *EndPtr != '"') ++EndPtr;
    Filename = (char *)StrNDup(p, EndPtr - p);
-   if (df) fprintf(df,"Loading %4.4x <%s>\n",Start,Filename);
    PrintLine();
    lp = fopen(Filename,"rb");
-   AssertFileOp(lp,"Could not LOAD <%s>\n");
+   if (!lp) ErrorExit("Could not LOAD file\n",p);
    fseek(lp,0,SEEK_END);
    Size = ftell(lp);
    rewind(lp);
@@ -2556,7 +2556,7 @@ char *ParseLoadData(char *p)
       exit(1);
    }
 
-   if (!Pass)
+   if (!Pass && Size > 0)
    {
       n = fread(ROM+Start,Size,1,lp);
       if (n != 1) ErrorExit("Load error\n",p);
@@ -3972,7 +3972,7 @@ char *GenerateCode(char *p)
    else
    {
       p = EvalOperand(p,&v,0);
-
+printf("v = %d   p = <%s>\n",v,p);
       if (XIM)
       {
          ol = 2;
