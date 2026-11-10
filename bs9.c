@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 08-Nov-2026
+Version: 10-Nov-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -600,7 +600,6 @@ struct MatStruct
    {"RTI"     ,{0,  0x3b,    -1,    -1,    -1,    -1,    -1,    -1}},
    {"CWAI"    ,{0,    -1,    -1,    -1,  0x3c,    -1,    -1,    -1}},
    {"MUL"     ,{0,  0x3d,    -1,    -1,    -1,    -1,    -1,    -1}},
-   {"RESET"   ,{0,  0x3e,    -1,    -1,    -1,    -1,    -1,    -1}},
    {"SWI"     ,{0,  0x3f,    -1,    -1,    -1,    -1,    -1,    -1}},
    {"NEGA"    ,{0,  0x40,    -1,    -1,    -1,    -1,    -1,    -1}},
    {"COMA"    ,{0,  0x43,    -1,    -1,    -1,    -1,    -1,    -1}},
@@ -786,7 +785,7 @@ struct MatStruct
    {"INCY"    ,{2,0x3121,    -1,    -1,    -1,    -1,    -1,    -1}}
  };
 
-#define DIMOP_6809 140
+#define DIMOP_6809 139
 #define DIMOP_6309 (sizeof(Mat) / sizeof(struct MatStruct))
 
 int DimOp = DIMOP_6309;
@@ -3784,10 +3783,8 @@ char *GenerateCode(char *p)
       if (oc == 0xcd && strchr(OpText+1,'.')) // LDQ #real constant
       {
          rop = ParseRealData(OpText+1,1);
-         v =  (Operand[0] << 24) |
-              (Operand[1] << 16) |
-              (Operand[2] <<  8) |
-               Operand[3];
+         v = (int)(((unsigned)Operand[0] << 24) | ((unsigned)Operand[1] << 16) |
+          ((unsigned)Operand[2] <<  8) |  (unsigned)Operand[3]);
       }
       else
       {
@@ -4994,7 +4991,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 08-Nov-2026         *\n");
+      printf("* Bit Shift Assembler 10-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
