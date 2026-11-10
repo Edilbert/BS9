@@ -59,6 +59,20 @@ Directives
 CPU = 6809                     allow code for 6809 only
 CPU = 6309                     allow full 6309 instruction set (default)
 
+Labels must start with a alphabetic ASCII character (A-Z, a-u) or
+a dot (.) or an underline (_). Starting with dot or underline declares
+local variables which are used in the current scope (module or subroutine).
+Labels, that begin with an alphabetic character are considered global
+and must be defined only once in the source code.
+Labels need not to start at the beginning of a line, they may start
+after an indentation. This has the side effect, that mistyped mnemonics
+may be interpreted as labels without error messages. Therefore the
+usage of a source code editor with syntax highlighting for the
+6809 and 6309 mnemonics is recommended. A syntax file for the vim
+editor is included in the BS9 repository.
+Also check after assembly the list of symbols for defined but unused
+symbols.
+
 Labels and Constants
 ====================
 
@@ -109,6 +123,9 @@ Strout.loop
 Strout.ret
 
 for these labels.
+
+Local variables are accessible from the outside by preceding them with
+the module or subroutine name, as shown in the example above.
 
 Assign addresses to symbols
 ===========================
@@ -401,7 +418,7 @@ char Line[ML+ML];            // source line
 
 void GetLine(FILE *f)
 {
-   fgets(Line,sizeof(Line),f);
+   (void)fgets(Line,sizeof(Line),f);
    if (strlen(Line) >= ML) ErrorExit("Line too long\n",Line);
 }
 
@@ -2488,6 +2505,7 @@ char *ParseLoadData(char *p)
    int Start,Size,Advance;
    char *Filename,*EndPtr;
    FILE *lp;
+   size_t n;
 
    p = SkipSpace(p);
 
@@ -2538,7 +2556,11 @@ char *ParseLoadData(char *p)
       exit(1);
    }
 
-   if (!Pass) fread(ROM+Start,Size,1,lp);
+   if (!Pass)
+   {
+      n = fread(ROM+Start,Size,1,lp);
+      if (n != 1) ErrorExit("Load error\n",p);
+   }
    fclose(lp);
    if (Advance) pc += Size;
    p += strlen(p);
