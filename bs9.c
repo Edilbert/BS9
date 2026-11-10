@@ -1956,8 +1956,8 @@ char *op_par(char *p, int *v)
 
 char *op_plu(char *p, int *v) { p = EvalOperand(p+1,v,12); return p; }
 char *op_min(char *p, int *v) { p = EvalOperand(p+1,v,12);
-                              if (*v == INT_MIN) ErrorExit("Integer overflow\n",p);
-                              if (*v != UNDEF) *v = -(*v); return p; }
+           if (*v != UNDEF) *v = (int)(0u - (unsigned)*v); return p; }
+
 char *op_lno(char *p, int *v) { p = EvalOperand(p+1,v,12);
                               if (*v != UNDEF) *v = !(*v); return p; }
 char *op_bno(char *p, int *v) { p = EvalOperand(p+1,v,12);
@@ -3972,7 +3972,6 @@ char *GenerateCode(char *p)
    else
    {
       p = EvalOperand(p,&v,0);
-printf("v = %d   p = <%s>\n",v,p);
       if (XIM)
       {
          ol = 2;
