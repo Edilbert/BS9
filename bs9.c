@@ -423,10 +423,16 @@ char Line[ML+ML];            // source line
 
 void GetLine(FILE *f)
 {
-   char *e; // error condition or EOF
+   char *e;     // error condition or EOF
+   size_t l;    // string length
+   Line[0] = 0; // empty line
    e = fgets(Line,sizeof(Line),f);
    if (e != Line && !feof(f)) ErrorExit("Read error\n",NULL);
-   if (strlen(Line) >= ML) ErrorExit("Line too long\n",Line);
+   l = strlen(Line);
+   if (l && Line[l-1] == 10) Line[--l] = 0; // Remove linefeed
+   if (l && Line[l-1] == 13) Line[--l] = 0; // Remove return
+   if (l >= ML) ErrorExit("Line too long\n",Line);
+   if (l && feof(f)) clearerr(f);
 }
 
 // store code or data into ROM array
@@ -4269,8 +4275,6 @@ void RecordMacro(char *p)
       {
          ++LiNo;
          l = strlen(Line);
-         if (l && Line[l-1] == 10) Line[--l] = 0; // Remove linefeed
-         if (l && Line[l-1] == 13) Line[--l] = 0; // Remove return
          p = strchr(Line,CHAMAC);
          if (p) ErrorExit("Illegal character ` in macro declaration",p);
 
@@ -4575,7 +4579,7 @@ int CloseInclude(void)
 
 void Phase1(void)
 {
-   int l,Eof;
+   int Eof;
 
    ForcedEnd = 0;
    Changes   = 0;
@@ -4591,9 +4595,6 @@ void Phase1(void)
    while (!Eof || IncludeLevel > 0)
    {
       ++LiNo; ++TotalLiNo;
-      l = strlen(Line);
-      if (l && Line[l-1] == 10) Line[--l] = 0; // Remove linefeed
-      if (l && Line[l-1] == 13) Line[--l] = 0; // Remove return
       ParseLine(Line);
       if (MacLev)
       {
@@ -4612,7 +4613,7 @@ void Phase1(void)
 
 void Phase2(void)
 {
-   int l,Eof;
+   int Eof;
 
    pc        =   -1;
    bss       =   -1;
@@ -4641,9 +4642,6 @@ void Phase2(void)
    while (!Eof || IncludeLevel > 0)
    {
       ++LiNo; ++TotalLiNo;
-      l = strlen(Line);
-      if (l && Line[l-1] == 10) Line[--l] = 0; // Remove linefeed
-      if (l && Line[l-1] == 13) Line[--l] = 0; // Remove return
       ParseLine(Line);
       if (MacLev)
       {
