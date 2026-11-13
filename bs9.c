@@ -417,9 +417,15 @@ void OperandError(char *);
 #define ML 256
 char Line[ML+ML];            // source line
 
+// *******
+// GetLine
+// *******
+
 void GetLine(FILE *f)
 {
-   (void)fgets(Line,sizeof(Line),f);
+   char *e; // error condition or EOF
+   e = fgets(Line,sizeof(Line),f);
+   if (e != Line && !feof(f)) ErrorExit("Read error\n",NULL);
    if (strlen(Line) >= ML) ErrorExit("Line too long\n",Line);
 }
 
