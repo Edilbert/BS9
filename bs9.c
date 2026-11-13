@@ -251,6 +251,9 @@ Generated Code:
    LDB #4
    JMP   [SWI1PT]
 
+Macros cannot be used recursively or nested!
+They must not call other macros or itself in its body.
+
 Macros accept up to 10 parameter and may have any length.
 The macro call replaces all occurences of the dummy parameter in the
 definition with the actual parameter if following conditions are fulfilled:
@@ -4332,8 +4335,8 @@ void RecordMacro(char *p)
          if (!Pass)
          {
             PrintLiNo();
-            if (ListOn) fprintf(lf,"            %s",Line);
-            if (pf) fprintf(pf,"%s",Line);
+            if (ListOn) fprintf(lf,"            %s\n",Line);
+            if (pf) fprintf(pf,"%s\n",Line);
          }
          ++LiNo;
       } while (!feof(sf) && !StrCaseStr(Line,"ENDM"));
