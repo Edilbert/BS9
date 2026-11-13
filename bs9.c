@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 10-Nov-2026
+Version: 13-Nov-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -290,7 +290,7 @@ else
 endif
 
 Example: Assemble first part if MO5 is defined ($0000 - $ffff)
-(undefined symbols are set to UNDEF ($00ff0000)
+(undefined symbols are set to UNDEF ($5a5aa5a5)
 
 ifdef MO5
    STA $D000
@@ -409,6 +409,7 @@ void AddLabel(char *p);
 void ErrorLine(char *p);
 void ErrorMsg(const char *format, ...);
 void ErrorExit(const char *msg, char *ptr);
+void CheckReserved(int v, char *p);
 char *ExtractOpText(char *);
 char *EvalOperand(char *, int *, int);
 char *ExtractValue(char *, int *);
@@ -843,7 +844,7 @@ struct PushStruct
 };
 
 
-#define UNDEF (int) 0xff0000
+#define UNDEF (int) 0x5a5aa5a5   // marker for undefined values
 
 int SkipHex    =  0; // switch on with -x
 int Debug      =  0; // switch on with -d
@@ -1815,6 +1816,19 @@ char *ParseRealData(char *p, int ldq)
    return p + strlen(p);;
 }
 
+int RelDist(int target, int base)   // target - base without int overflow
+{
+   long long d = (long long)target - base;
+   if (d >  0x40000000LL) d =  0x40000000LL;   // clamp: far out of range anyway
+   if (d < -0x40000000LL) d = -0x40000000LL;
+   return (int)d;
+}
+
+void CheckReserved(int v, char *p)
+{
+   if (v == UNDEF) ErrorExit("Value $5A5AA5A5 is reserved (marker for undefined)\n",p);
+}
+
 char *EvalHexValue(char *p, int *v)
 {
    char *EndPtr;
@@ -1824,6 +1838,7 @@ char *EvalHexValue(char *p, int *v)
    u = strtoull(p,&EndPtr,16);                // overflow: ULLONG_MAX
    if (u > 0xffffffffULL) ErrorExit("Hex constant exceeds 32 bits\n",p);
    *v = (int)(unsigned)u;
+   CheckReserved(*v,p);
    if (*EndPtr == '.' || isalpha(*EndPtr))
       ErrorExit("Illegal character after hex constant\n",EndPtr);
    return EndPtr;
@@ -1852,6 +1867,7 @@ char *EvalDecValue(char *p, int *v)
       if (u > 0xffffffffULL) ErrorExit("Decimal constant exceeds 32 bits\n",p);
    }
    *v = (int)(unsigned)u;
+   CheckReserved(*v,p);
 
    if (!isalpha(*p)) return p;
 
@@ -1907,6 +1923,7 @@ char *EvalMultiCharValue(char *p, int *v)
    }
    if (*p == '\"') ++p;        // end quote
    else ErrorExit("Multi character operand too long ( > 4 )\n",p);
+   CheckReserved(*v,p);
    return p;
 }
 
@@ -1926,6 +1943,7 @@ char *EvalBinValue(char *p, int *v)
       ++p;
    }
    *v = r;
+   CheckReserved(*v,p);
    return p;
 }
 
@@ -1956,12 +1974,12 @@ char *op_par(char *p, int *v)
 
 char *op_plu(char *p, int *v) { p = EvalOperand(p+1,v,12); return p; }
 char *op_min(char *p, int *v) { p = EvalOperand(p+1,v,12);
-           if (*v != UNDEF) *v = (int)(0u - (unsigned)*v); return p; }
+           if (*v != UNDEF) { *v = (int)(0u - (unsigned)*v); CheckReserved(*v,p); } return p; }
 
 char *op_lno(char *p, int *v) { p = EvalOperand(p+1,v,12);
-                              if (*v != UNDEF) *v = !(*v); return p; }
+                              if (*v != UNDEF) { *v = !(*v); CheckReserved(*v,p); } return p; }
 char *op_bno(char *p, int *v) { p = EvalOperand(p+1,v,12);
-                              if (*v != UNDEF) *v = ~(*v); return p; }
+                              if (*v != UNDEF) { *v = ~(*v); CheckReserved(*v,p); } return p; }
 char *op_low(char *p, int *v) { p = EvalOperand(p+1,v,12);
                               ForcedMode=-1 ; return p; }
 char *op_hig(char *p, int *v) { p = EvalOperand(p+1,v,12);
@@ -2165,8 +2183,8 @@ char *EvalOperand(char *p, int *v, int prio)
                return p;
             }
             p = EvalOperand(p+l,&w,o);
-            if (w == UNDEF) r = UNDEF;
-            else r = binop[i].foo(r,w,p);
+            if (w == UNDEF || r == UNDEF) r = UNDEF;
+            else { r = binop[i].foo(r,w,p); CheckReserved(r,p); }
             break;
          }
       }
@@ -3458,8 +3476,8 @@ int SetPostByte(char *p, int *v)
    {
       if (df) fprintf(df,"check PC relative %s\n",p);
       p = EvalOperand(p,&off,0);
-      if (oc > 255) off -= pc+4; // two byte opcodes
-      else          off -= pc+3;
+      if (oc > 255) off = RelDist(off,pc+4); // two byte opcodes
+      else          off = RelDist(off,pc+3);
       if (ForcedMode < 0 || (off >= -128 && off < 128))
       {
          ql = 1;
@@ -3744,7 +3762,7 @@ char *GenerateCode(char *p)
 
       EvalOperand(OpText,&v,0);
       relv = v;
-      if (v != UNDEF) relv -= (pc + il);
+      if (v != UNDEF) relv = RelDist(v,pc + il);
       else if (Pass == 1) ++Unresolved;
       if (Pass != 1 && v == UNDEF)
          ErrorExit("Branch to undefined label\n",p);
@@ -3772,7 +3790,7 @@ char *GenerateCode(char *p)
             ql = 2;
             il = 4;
          }
-         relv = v - pc - il;
+         relv = RelDist(v,pc + il);
       }
       v = relv;
       if (ql == 1) v &= 0xff;
@@ -5012,7 +5030,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 10-Nov-2026         *\n");
+      printf("* Bit Shift Assembler 13-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
