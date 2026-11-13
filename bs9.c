@@ -251,8 +251,8 @@ Generated Code:
    LDB #4
    JMP   [SWI1PT]
 
-Macros cannot be used recursively or nested!
-They must not call other macros or itself in its body.
+Macros cannot be used recursively!  They must not call itself in its body.
+A macro declaration cannot include another macro declaration in its body.
 
 Macros accept up to 10 parameter and may have any length.
 The macro call replaces all occurences of the dummy parameter in the
@@ -860,6 +860,7 @@ struct PushStruct
 
 
 #define UNDEF (int) 0x5a5aa5a5   // marker for undefined values
+#define MACLEV      10           // maximum macro nesting
 
 int SkipHex    =  0; // switch on with -x
 int Debug      =  0; // switch on with -d
@@ -870,7 +871,7 @@ int Preprocess =  0; // print preprocessed source file <file.pp>
 int Quiet      =  0; // switch for quiet mode
 int ERRMAX     = 10; // stop assemby after ERRMAX errors
 int EnumValue  = -1; // last used ENUM value
-int MacLev;          // macro nesting level
+int MacLev     =  0; // macro nesting level
 int MacList    =  1; // macro listing option
 int ModuleStart;     // address of a module
 int Optimize   =  1; // branch and jump omtimization
@@ -993,7 +994,7 @@ struct MacroStruct
    int  Cola;   // column of macro definition (for pretty printing)
 } Mac[MAXMAC];
 
-char *MacPtr[MAXMAC]; // pointer inside macro body
+char *MacPtr[MACLEV]; // pointer inside macro body
 int Macros;           // total number of macros
 
 // *********
@@ -4276,6 +4277,7 @@ void RecordMacro(char *p)
       GetLine(sf);
       while (!feof(sf) && !StrCaseStr(Line,"ENDM"))
       {
+         if (StrCaseStr(Line,"MACRO")) ErrorExit("Illegal MACRO nesting\n",Line);
          ++LiNo;
          l = strlen(Line);
          p = strchr(Line,CHAMAC);
@@ -4355,7 +4357,6 @@ int ExpandMacro(char *m)
 
    j = MacroIndex(m);
    if (j < 0) return j;
-   if (df) fprintf(df,"\nExpanding [%s] phase %d\n",Mac[j].Name,Pass);
 
    p = NextSymbol(m,Macro);
    p = SkipSpace(p);
@@ -4375,6 +4376,7 @@ int ExpandMacro(char *m)
 
    if (Mac[j].Body) // ignore empty macros
    {
+      if (MacLev >= MACLEV-1) ErrorExit("Too many nested macros\n",Line);
       ++MacLev;
       MacPtr[MacLev] = Mac[j].Body;
    }
@@ -4602,7 +4604,6 @@ void Phase1(void)
       if (MacLev)
       {
          NextMacLine(Line);
-         if (df) fprintf(df,"Macro: %s\n",Line);
       }
       else
       {
@@ -4622,6 +4623,7 @@ void Phase2(void)
    bss       =   -1;
    EnumValue =   -1;
    ForcedEnd =    0;
+   MacLev    =    0;
    ListOn    =    1;
    CPU       = 6309;
    DimOp     = DIMOP_6309;
