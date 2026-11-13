@@ -2985,7 +2985,7 @@ char *ps_align(char *p)
       if (pc < 0) ErrorExit("Align PC undefined\n",p);
    }
 
-   p = AlignFill(p+1,&a,&fill);
+   p = AlignFill(p,&a,&fill);
    if (a < 1 || a > 0x7fff) ErrorExit("Illegal align parameter\n",p);
    if (fill < -128 || fill > 255) ErrorExit("Illegal fill value\n",p);
 
@@ -2993,14 +2993,12 @@ char *ps_align(char *p)
    {
       a = (a - bss % a) % a;
       if (bss + a > 0x10000) ErrorExit("ALIGN exceeds 64 KB\n",p);
-      if (df) fprintf(df,"Data align %4.4x - %4.4x fill %2.2x\n",bss,bss+a,fill);
       while (a--) ROM[bss++] = fill;
    }
    else
    {
       a = (a - pc  % a) % a;
       if (pc + a > 0x10000) ErrorExit("ALIGN exceeds 64 KB\n",p);
-      if (df) fprintf(df,"Code align %4.4x - %4.4x fill %2.2x\n",pc,pc+a,fill);
       while (a--) ROM[pc++]  = fill;
    }
    PrintPCLine();
