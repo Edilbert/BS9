@@ -971,6 +971,8 @@ struct LabelStruct
    int   Address;  // Range 0 - 65536
    int   Bytes;    // Length of object (string for example)
    int   Locked;   // Cannot change value
+   char *DefFile;  // file of first EQU/=/ENUM/SET definition
+   int   DefLine;  // line of first definition
    int   NumRef;   // # of references
    int  *Ref;      // list of references
    int  *Att;      // list of attributes
@@ -1488,11 +1490,11 @@ char *ExtractOpText(char *p)
 
    if (CodeStyle == 1) // Thomson style
    {
-      while (*p && *p != ' ' && l < ML) OpText[l++] = *p++;
+      while (*p && *p != ' ' && l < ML-1) OpText[l++] = *p++;
    }
    else
    {
-      while (*p && l < ML)
+      while (*p && l < ML-1)
       {
          if (*p == '"'  && inapo == 0) inquo = !inquo;
          if (*p == '\'' && inquo == 0) inapo = !inapo;
@@ -1527,8 +1529,8 @@ struct LabelDefStruct
 
 char *DefineLabel(char *p, int *val, char Type)
 {
-   int i,j,l,v;
-   char *rop;
+   int i,j,l,v,same;
+   char *rop,*site;
 
    *val = UNDEF; // preset
 
@@ -1569,9 +1571,20 @@ char *DefineLabel(char *p, int *val, char Type)
          p += strlen(p);
          rop = EvalOperand(OpText,&v,0);
          if (*rop) ErrorExit("Extra text after label assignment\n",rop);
-         if (lab[j].Address == UNDEF || LabDef[i].Type == 0)
+         // EQU, = and ENUM define constants: the same definition may be
+         // evaluated again in every pass, but a second definition elsewhere
+         // with another value is an error. SET defines a variable and may
+         // be reassigned at any time.
+         site = IncludeStack[IncludeLevel].Src ? IncludeStack[IncludeLevel].Src : "";
+         if (!lab[j].DefFile)
+         {
+            lab[j].DefFile = (char *)StrNDup(site,strlen(site));
+            lab[j].DefLine = LiNo;
+         }
+         same = lab[j].DefLine == LiNo && !strcmp(lab[j].DefFile,site);
+         if (LabDef[i].Type < 0 || same || lab[j].Address == UNDEF)
              lab[j].Address = v;
-         else if (lab[j].Address != v && !lab[j].Locked)
+         else if (Pass == 0 && v != UNDEF && lab[j].Address != v)
          {
             ++ErrNum;
             ErrorLine(p);
