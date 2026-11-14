@@ -253,6 +253,8 @@ Generated Code:
 
 Macros cannot be used recursively!  They must not call itself in its body.
 A macro declaration cannot include another macro declaration in its body.
+Macro names must not match mnemonnics.
+Arguments must not contain expressions with parenthesis.
 
 Macros accept up to 10 parameter and may have any length.
 The macro call replaces all occurences of the dummy parameter in the
@@ -4297,6 +4299,7 @@ void RecordMacro(char *p)
    l = strlen(Macro);
    if (l == 0) ErrorExit("Unnamed macro\n",pe);
    p = SkipSpace(p);
+   if (IsInstruction(Macro) >= 0) ErrorExit("Macro name must not match a mnemonic\n",pe);
 
    if (*p == '(')
    {
