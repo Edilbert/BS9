@@ -2845,7 +2845,7 @@ char *ParseByteData(char *p)
             ErrorLine(p);
             exit(1);
          }
-         if (v < BYTEMIN || v > BYTEMIN) ByteBuffer[l++] = (v >> 8) & 255;
+         if (v < BYTEMIN || v > BYTEMAX) ByteBuffer[l++] = (v >> 8) & 255;
          ByteBuffer[l++] = v & 0xff;
       }
       if (CodeStyle == 1 && *p == ' ') break;
