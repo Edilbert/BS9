@@ -5027,23 +5027,37 @@ int main(int argc, char *argv[])
       else if (!strcmp(argv[ic],"-q")) Quiet      = 1;
       else if (!strncmp(argv[ic],"-I",2))
       {
-         if (++ic == argc)
+         if (strlen(argv[ic]) > 2)
          {
-            fprintf(stderr, "Missing value for -I\n");
-            exit(1);
+            DefineIncludePath(argv[ic]+2);
          }
-         DefineIncludePath(argv[ic]);
+         else
+         {
+            if (++ic == argc)
+            {
+               fprintf(stderr, "Missing value for -I\n");
+               exit(1);
+            }
+            DefineIncludePath(argv[ic]);
+         }
       }
       else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,'D');
       else if (!strncmp(argv[ic],"-l",2))
       {
-         if (++ic == argc)
-         {
-            fprintf(stderr, "Missing value for -l\n");
-            exit(1);
-         }
          errno = 0;
-         Preset = strtol(argv[ic], &EndPtr,0);
+         if (strlen(argv[ic]) > 2)
+         {
+            Preset = strtol(argv[ic]+2, &EndPtr,0);
+         }
+         else
+         {
+            if (++ic == argc)
+            {
+               fprintf(stderr, "Missing value for -l\n");
+               exit(1);
+            }
+            Preset = strtol(argv[ic], &EndPtr,0);
+         }
          if (errno != 0 || *EndPtr != '\0' || Preset < 0 || Preset > 0xff)
          {
             fprintf(stderr, "Illegal value '%s' for -l\n",argv[ic]);
