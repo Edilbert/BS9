@@ -3163,6 +3163,19 @@ struct PseudoStruct PseudoTab[] =
 
 #define PSEUDOS (int)(sizeof(PseudoTab) / sizeof(struct PseudoStruct))
 
+// keywords handled outside of PseudoTab
+int IsKeyword(char *p)
+{
+   static const char *Key[] = {"IF","IFDEF","IFNDEF","ELSE","ENDIF",
+                               "MACRO","ENDM","EQU","SET","ENUM"};
+   int i;
+
+   p = SkipSpace(p);
+   for (i=0 ; i < (int)(sizeof(Key)/sizeof(Key[0])) ; ++i)
+      if (!strcmpword(p,Key[i])) return 1;
+   return 0;
+}
+
 int IsPseudo(char *p)
 {
    int i;
@@ -4310,7 +4323,7 @@ void RecordMacro(char *p)
    l = strlen(Macro);
    if (l == 0) ErrorExit("Unnamed macro\n",pe);
    p = SkipSpace(p);
-   if (IsInstruction(Macro) >= 0 || IsPseudo(Macro))
+   if (IsInstruction(Macro) >= 0 || IsPseudo(Macro) >= 0 || IsKeyword(Macro))
       ErrorExit("Macro name is reserved\n",pe);
 
    if (*p == '(')
