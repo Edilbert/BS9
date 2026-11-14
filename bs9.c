@@ -2503,18 +2503,18 @@ char *ParseStoreData(char *p)
       if (i == SKEY) ErrorExit("Unknown output file format\n",p);
       FileFormat = StSt[i].Type;
       p = q + strlen(StSt[i].Name);
-      p = NeedChar(p,',');
-      if (p)
+      q = NeedChar(p,',');
+      if (q)
       {
-         p = EvalOperand(p+1,&Entry,0);
+         p = EvalOperand(q+1,&Entry,0);
          if (Entry < 0 || Entry > 0xffff)
          {
             ErrorMsg("Illegal execution start address for STORE %d\n",Entry);
             ErrorLine(p);
             exit(1);
          }
-      } else p = EndPtr;
-   } else p = EndPtr;
+      }
+   } else p = EndPtr+1;
    p = SkipSpace(p);
    if (*p != 0 && *p != ';') ErrorExit("STORE syntax error",p);
 
