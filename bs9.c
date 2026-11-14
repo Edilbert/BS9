@@ -2436,10 +2436,23 @@ char *IncludeFile(char *p)
    return p+1; // skip quote after filename
 }
 
+#define SKEY 4
+struct StoreStruct
+{
+   char Name[8];
+   int  Type;
+} StSt[SKEY] =
+{
+   {"BIN"    ,BINARY },
+   {"SREC"   ,SRECORD},
+   {"S19"    ,SRECORD},
+   {"SPARROW",SPARROW}
+};
+
 char *ParseStoreData(char *p)
 {
-   int Start,Length,FileFormat,Entry;
-   char *Filename,*EndPtr;
+   int Start,Length,FileFormat,Entry,i;
+   char *Filename,*EndPtr,*q;
 
    if (Pass) return p + strlen(p); // continue on last pass (0) only
    p = EvalOperand(p,&Start,0);
@@ -2482,17 +2495,17 @@ char *ParseStoreData(char *p)
    p = NeedChar(EndPtr+1,',');
    if (p)
    {
-      ++p;
-      if (df) fprintf(df,"store format:%s:\n",p);
-           if (StrMatch(p, "BIN"))  FileFormat = BINARY;
-      else if (StrMatch(p, "SREC")) FileFormat = SRECORD;
-      else if (StrMatch(p, "S19"))  FileFormat = SRECORD;
-      else if (StrMatch(p, "SPARROW"))  FileFormat = SPARROW;
-      else ErrorExit("Unknown output file format\n",p);
-      p = strchr(p,',');
+      for (i=0 ; i < SKEY ; ++i)
+      {
+         q = StrMatch(p+1,StSt[i].Name);
+         if (q) break;
+      }
+      if (i == SKEY) ErrorExit("Unknown output file format\n",p);
+      FileFormat = StSt[i].Type;
+      p = q + strlen(StSt[i].Name);
+      p = NeedChar(p,',');
       if (p)
       {
-         if (df) fprintf(df,"store header:%s:\n",p);
          p = EvalOperand(p+1,&Entry,0);
          if (Entry < 0 || Entry > 0xffff)
          {
@@ -2502,6 +2515,8 @@ char *ParseStoreData(char *p)
          }
       } else p = EndPtr;
    } else p = EndPtr;
+   p = SkipSpace(p);
+   if (*p != 0 && *p != ';') ErrorExit("STORE syntax error",p);
 
    if (Start + Length > 0x10000)
    {
@@ -2520,15 +2535,6 @@ char *ParseStoreData(char *p)
    SFE[StoreCount] = Entry;
    SFF[StoreCount] = Filename;
    SFT[StoreCount] = FileFormat;
-   if (df)
-   {
-      fprintf(df,"Storing %4.4x - %4.4x <%s>,",
-           Start,Start+Length-1,Filename);
-           if (FileFormat == SPARROW) fprintf(df,"SPARROW");
-      else if (FileFormat == SRECORD) fprintf(df,"SRECORD");
-      else                            fprintf(df,"BINARY");
-   }
-   if (df) fprintf(df,", Ex = %d\n",Entry);
    ++StoreCount;
    PrintLine();
    p += strlen(p);
