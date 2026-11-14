@@ -2441,7 +2441,7 @@ char *ParseStoreData(char *p)
    int Start,Length,FileFormat,Entry;
    char *Filename,*EndPtr;
 
-   if (Pass) return p + strlen(p);
+   if (Pass) return p + strlen(p); // continue on last pass (0) only
    p = EvalOperand(p,&Start,0);
    if (Start < 0 || Start > 0xffff)
    {
@@ -2483,15 +2483,16 @@ char *ParseStoreData(char *p)
    if (p)
    {
       ++p;
+      if (df) fprintf(df,"store format:%s:\n",p);
            if (StrMatch(p, "BIN"))  FileFormat = BINARY;
       else if (StrMatch(p, "SREC")) FileFormat = SRECORD;
       else if (StrMatch(p, "S19"))  FileFormat = SRECORD;
       else if (StrMatch(p, "SPARROW"))  FileFormat = SPARROW;
       else ErrorExit("Unknown output file format\n",p);
-      if (df) fprintf(df,"Filefornat = %d\n",FileFormat);
-      p = NeedChar(p,',');
+      p = strchr(p,',');
       if (p)
       {
+         if (df) fprintf(df,"store header:%s:\n",p);
          p = EvalOperand(p+1,&Entry,0);
          if (Entry < 0 || Entry > 0xffff)
          {
@@ -2523,10 +2524,11 @@ char *ParseStoreData(char *p)
    {
       fprintf(df,"Storing %4.4x - %4.4x <%s>,",
            Start,Start+Length-1,Filename);
-           if (FileFormat == SPARROW) fprintf(df,"SPARROW\n");
-      else if (FileFormat == SRECORD) fprintf(df,"SRECORD\n");
-      else                            fprintf(df,"BINARY\n");
+           if (FileFormat == SPARROW) fprintf(df,"SPARROW");
+      else if (FileFormat == SRECORD) fprintf(df,"SRECORD");
+      else                            fprintf(df,"BINARY");
    }
+   if (df) fprintf(df,", Ex = %d\n",Entry);
    ++StoreCount;
    PrintLine();
    p += strlen(p);
@@ -4769,8 +4771,8 @@ void WriteBinaryFormat(int i)
     FILE *bf;
     const char *msg = "Write binary";
 
-    if (df) fprintf(df,"Storing $%4.4x - $%4.4x <%s>\n",
-                    SFA[i],SFA[i]+SFL[i],SFF[i]);
+    if (df) fprintf(df,"Storing $%4.4x - $%4.4x <%s>,%d\n",
+                    SFA[i],SFA[i]+SFL[i],SFF[i],SFE[i]);
     bf = AssertFileOp(fopen(SFF[i],"wb"), msg);
     if (SFE[i] > -1)
     {
