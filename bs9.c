@@ -154,7 +154,7 @@ LOAD  "image.bin"              load binary file starting at current address
 LIST +                         switch on  assembler listing
 LIST -                         switch off assembler listing
 BITS . . * . * . . .           stores a byte from 8 bit symbols
-BYTE $20,"Example",0           stores a series of byte data
+BYTE $20,"Example",0           stores a series of mixed data
 WORD LAB_10, WriteTape,$0200   stores a series of word data
 LONG 1000000                   stores 32 bit long data
 REAL  3.1415926                stores a 32 bit real
@@ -169,7 +169,7 @@ TXTTAB BSS 2                   define TXTTAB and increase address pointer by 2
   & = $033A                    set BSS address pointer
 ORG   $E000                    set program counter
 SETDP $20                      assume content of direct page register
-FCB   $20,"Example",0          stores a series of byte data
+FCB   $20,"Example",0          stores a series of mixed data
 FDB   LAB_10, WriteTape,$0200  stores a series of word data
 FCC   "Example\n"              store ASCII string
 ALIGN 16                       align PC (fill gaps with NOPs)
@@ -2277,6 +2277,12 @@ char *ParseWordData(char *p)
    while (*p && *p != ';') // Parse data line
    {
       p = EvalOperand(p,&v,0);
+      if (!Pass && v != UNDEF && (v < WORDMIN || v > WORDMAX))
+      {
+         ErrorMsg("WORD value %d out of range (%d..%d)\n",v,WORDMIN,WORDMAX);
+         ErrorLine(p);
+         exit(1);
+      }
       ByteBuffer[l++] = v >> 8;
       ByteBuffer[l++] = v;
       p = SkipToComma(p);
@@ -2833,12 +2839,14 @@ char *ParseByteData(char *p)
          p = EvalOperand(p,&v,0);
          if (v == UNDEF && !Pass)
             ErrorExit("Undefined symbol in BYTE data\n",p);
-         if (v > 255 || v < -127) ByteBuffer[l++] = v >> 8;
-         ByteBuffer[l++] = v & 0xff;
-         if (df)
+         if (!Pass && v != UNDEF && (v < WORDMIN || v > WORDMAX))
          {
-            fprintf(df,"BYTE   $%4.4x: %2.2x\n",pc,v);
+            ErrorMsg("value %d out of range\n",v);
+            ErrorLine(p);
+            exit(1);
          }
+         if (v < BYTEMIN || v > BYTEMIN) ByteBuffer[l++] = (v >> 8) & 255;
+         ByteBuffer[l++] = v & 0xff;
       }
       if (CodeStyle == 1 && *p == ' ') break;
       p = SkipToComma(p);
@@ -3064,6 +3072,12 @@ char *ps_rmb(char *p)
    {
       ErrorMsg("Only theoretical physicists are allowed to reserve "
                "a negative amount of space: %d bytes\n", size);
+      ErrorLine(p);
+      exit(1);
+   }
+   if ((long long)pc + size > 0x10000LL)
+   {
+      ErrorMsg("RMB exceeds 64 KB: %d bytes at $%4.4x\n",size,pc);
       ErrorLine(p);
       exit(1);
    }
@@ -4081,7 +4095,7 @@ char *GenerateCode(char *p)
 
             if (oc == OP_JMP_E && v != UNDEF)
             {
-               relv = v - pc - 2;
+               relv = RelDist(v,pc + 2);
                if (relv >= -128 && relv <= 127) // short branch
                {
                   oc = OP_BRA;
@@ -4096,7 +4110,7 @@ char *GenerateCode(char *p)
 
             if (oc == OP_JSR_E && v != UNDEF)
             {
-               relv = v - pc - 2;
+               relv = RelDist(v,pc + 2);
                if (relv >= -128 && relv <= 127) // short branch
                {
                   oc = OP_BSR;
