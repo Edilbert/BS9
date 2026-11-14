@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 13-Nov-2026
+Version: 14-Nov-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -3218,7 +3218,7 @@ void CheckSkip(void)
 
 int CheckCondition(char *p)
 {
-   int r,v,Ifdef,Ifndef,Ifval;
+   int r,v,Ifdef,Ifndef,Ifval,nl;
    r = 0;
    if (*p == '#') ++p; // old syntax #if, #endif, etc.
    if (!strcmpword(p,"error") && Pass)
@@ -3239,12 +3239,16 @@ int CheckCondition(char *p)
       if (IfLevel > 9) ErrorExit("More than 9  IF or IFDEF conditions nested\n",p);
       if (Ifdef)
       {
+         nl = Labels;
          p = EvalOperand(p+6,&v,0);
+         if (Labels == nl+1 && lab[nl].Address == UNDEF) Labels = nl; // IFDEF must not create a symbol
          SkipLine[IfLevel] = v == UNDEF;
       }
       else if (Ifndef)
       {
+         nl = Labels;
          p = EvalOperand(p+7,&v,0);
+         if (Labels == nl+1 && lab[nl].Address == UNDEF) Labels = nl;
          SkipLine[IfLevel] = v != UNDEF;
       }
       else // if (Ifval)
@@ -4735,6 +4739,7 @@ void ListUndefinedSymbols(void)
       if (lab[i].Address == UNDEF)
       {
          printf("* Undefined   : %-25.25s *\n",lab[i].Name);
+         ++ErrNum;
       }
    }
 }
@@ -5045,7 +5050,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 13-Nov-2026         *\n");
+      printf("* Bit Shift Assembler 14-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
