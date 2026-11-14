@@ -253,7 +253,7 @@ Generated Code:
 
 Macros cannot be used recursively!  They must not call itself in its body.
 A macro declaration cannot include another macro declaration in its body.
-Macro names must not match mnemonnics.
+Macro names must not match reserved words like mnemonnics or instructions.
 Arguments must not contain expressions with parenthesis.
 
 Macros accept up to 10 parameter and may have any length.
@@ -3163,6 +3163,17 @@ struct PseudoStruct PseudoTab[] =
 
 #define PSEUDOS (int)(sizeof(PseudoTab) / sizeof(struct PseudoStruct))
 
+int IsPseudo(char *p)
+{
+   int i;
+
+   p = SkipSpace(p);
+
+   for (i=0 ; i < PSEUDOS ; ++i)
+   if (!strcmpword(p,PseudoTab[i].keyword)) return i; // hit
+   return -1;
+}
+
 char *CheckPseudo(char *p)
 {
    int i;
@@ -4299,7 +4310,8 @@ void RecordMacro(char *p)
    l = strlen(Macro);
    if (l == 0) ErrorExit("Unnamed macro\n",pe);
    p = SkipSpace(p);
-   if (IsInstruction(Macro) >= 0) ErrorExit("Macro name must not match a mnemonic\n",pe);
+   if (IsInstruction(Macro) >= 0 || IsPseudo(Macro))
+      ErrorExit("Macro name is reserved\n",pe);
 
    if (*p == '(')
    {
