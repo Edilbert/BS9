@@ -2507,6 +2507,7 @@ char *ParseStoreData(char *p)
       if (q)
       {
          p = EvalOperand(q+1,&Entry,0);
+         if (Entry == UNDEF) ErrorExit("Undefined start address",q);
          if (Entry < 0 || Entry > 0xffff)
          {
             ErrorMsg("Illegal execution start address for STORE %d\n",Entry);
@@ -4734,7 +4735,6 @@ void ListUndefinedSymbols(void)
       if (lab[i].Address == UNDEF)
       {
          printf("* Undefined   : %-25.25s *\n",lab[i].Name);
-         ++ErrNum;
       }
    }
 }
