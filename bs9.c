@@ -4271,7 +4271,7 @@ int ExtractArgs(char *p, char args[])
       args[l++] = *p++;
    }
    while (l && isspace(args[l-1])) args[--l] = 0;
-   if (args[l-1] != ')') ErrorExit("Missing ) in macro arguments\n",p);
+   if (!l || args[l-1] != ')') ErrorExit("Missing ) in macro arguments\n",p);
    args[--l] = 0; // end marker
    while (l && isspace(args[l-1])) args[--l] = 0;
    return l;
@@ -4299,6 +4299,7 @@ int ScanArguments(char *p, char *args, int ptr[], int nargs)
       if (nargs == MAXARGS+1) q = GetSymbol(q,sym);    // dummy   parameter
       else                    q = GetMacroArg(q,sym);  // current parameter
       l = strlen(sym);
+      if (!l) ErrorExit("Missing macro parameter\n",p);
       if (l) memmove(args+ptr[n],sym,l+1);
       else   args[ptr[n]] = 0;
       ++n;
@@ -4310,6 +4311,7 @@ int ScanArguments(char *p, char *args, int ptr[], int nargs)
          if (NeedChar(q,',')) ++q;
          else ErrorExit("comma expected\n",q);
          q = SkipSpace(q);
+         if (!*q) ErrorExit("Missing parameter\n",p);
       }
    }
    return n;
