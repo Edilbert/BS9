@@ -5031,7 +5031,7 @@ void usage(void)
    printf("Usage: bs9 [options] <source>\n");
    printf("Options:\n");
    printf("   -d print details in file <Debug.lst>\n");
-   printf("   -D Define symbols\n");
+   printf("   -D Define symbol: -Dname (value 1) or -Dname=value\n");
    printf("   -i ignore case in symbols\n");
    printf("   -I include path\n");
    printf("   -h display this usage\n");
@@ -5098,7 +5098,38 @@ int main(int argc, char *argv[])
             DefineIncludePath(argv[ic]);
          }
       }
-      else if (!strncmp(argv[ic],"-D",2)) DefineLabel(argv[ic]+2,&v,'D');
+      else if (!strncmp(argv[ic],"-D",2))
+      {
+         // -Dname defines name = 1, -Dname=value defines name = value
+         char def[ML];
+         char *a = argv[ic]+2;
+
+         if (!*a) // value in next argument: -D name[=value]
+         {
+            if (++ic == argc)
+            {
+               fprintf(stderr, "Missing value for -D\n");
+               exit(1);
+            }
+            a = argv[ic];
+         }
+         if (strlen(a) >= ML-3 || !(*a == '_' || isalpha((unsigned char)*a)))
+         {
+            fprintf(stderr, "Illegal symbol in -D %s\n",a);
+            exit(1);
+         }
+         if (strchr(a,'='))
+         {
+            if (!*(strchr(a,'=')+1))
+            {
+               fprintf(stderr, "Missing value in -D %s\n",a);
+               exit(1);
+            }
+            snprintf(def,ML,"%s",a);
+         }
+         else snprintf(def,ML,"%s=1",a);
+         DefineLabel(def,&v,'D');
+      }
       else if (!strncmp(argv[ic],"-l",2))
       {
          errno = 0;
