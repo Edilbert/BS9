@@ -5059,10 +5059,29 @@ void DefineIncludePath(char *path)
    if (Ipa[l-1] != '/') strcat(Ipa,"/");
 }
 
+// Parse a plain byte value: decimal, 0xNN or $NN.
+// No white space, sign, quotes or other text. Returns 1 if valid.
+
+int ParseByteValue(const char *s, int *val)
+{
+   char *end;
+   long v;
+   int base = 10;
+
+   if (s[0] == '$')                                   { base = 16; ++s; }
+   else if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) { base = 16; s += 2; }
+   if (!(base == 16 ? isxdigit((unsigned char)s[0]) : isdigit((unsigned char)s[0])))
+      return 0;
+   errno = 0;
+   v = strtol(s,&end,base);
+   if (errno || *end || v < 0 || v > 0xff) return 0;
+   *val = (int)v;
+   return 1;
+}
+
 int main(int argc, char *argv[])
 {
    int ic,l,v;
-   char *EndPtr;
    char *argsrc = NULL; // argument filename;
    time_t rawtime;
    struct tm * timeinfo;
@@ -5132,23 +5151,20 @@ int main(int argc, char *argv[])
       }
       else if (!strncmp(argv[ic],"-l",2))
       {
-         errno = 0;
-         if (strlen(argv[ic]) > 2)
-         {
-            Preset = strtol(argv[ic]+2, &EndPtr,0);
-         }
-         else
+         char *a = argv[ic]+2;
+
+         if (!*a) // value in next argument
          {
             if (++ic == argc)
             {
                fprintf(stderr, "Missing value for -l\n");
                exit(1);
             }
-            Preset = strtol(argv[ic], &EndPtr,0);
+            a = argv[ic];
          }
-         if (errno != 0 || *EndPtr != '\0' || Preset < 0 || Preset > 0xff)
+         if (!ParseByteValue(a,&Preset))
          {
-            fprintf(stderr, "Illegal value '%s' for -l\n",argv[ic]);
+            fprintf(stderr, "Illegal value '%s' for -l (byte value 0..255, decimal, 0xNN or $NN)\n",a);
             exit(1);
          }
          memset(ROM,Preset,sizeof(ROM));
