@@ -254,7 +254,7 @@ Generated Code:
 Macros cannot be used recursively!  They must not call itself in its body.
 A macro declaration cannot include another macro declaration in its body.
 Macro names must not match reserved words like mnemonnics or instructions.
-Arguments must not contain expressions with parenthesis.
+Arguments may contain balanced parentheses, quoted strings and commas inside them.
 
 Macros accept up to 10 parameter and may have any length.
 The macro call replaces all occurences of the dummy parameter in the
@@ -1087,10 +1087,30 @@ char *GetSymbol(char *p, char *s)
 // GetMacroArg
 // ***********
 
+// An argument ends at a comma or at a closing parenthesis on level 0.
+// Parentheses inside the argument must be balanced, characters inside
+// quotes or apostrophes are not interpreted.
+
 char *GetMacroArg(char *p, char *s)
 {
+   int level = 0;       // parenthesis nesting level
+   int inquo = 0;       // inside quotes
+   int inapo = 0;       // inside apostrophes
+
    p = SkipSpace(p);
-   while (*p && *p != ',' && *p != ')') *s++ = *p++;
+   while (*p)
+   {
+      if (*p == '"'  && !inapo) inquo = !inquo;
+      if (*p == '\'' && !inquo) inapo = !inapo;
+      if (!inquo && !inapo)
+      {
+         if (*p == '(') ++level;
+         if (*p == ')' && level == 0) break;
+         if (*p == ')') --level;
+         if (*p == ',' && level == 0) break;
+      }
+      *s++ = *p++;
+   }
    *s = 0;
    return p;
 }
