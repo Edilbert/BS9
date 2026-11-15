@@ -2437,6 +2437,7 @@ char *IncludeFile(char *p)
    {
       f = strlen(FileName);
       l = strlen(Ipa);
+      if (f+l >= FNSIZE) ErrorExit("Path/Filename too long\n",p);
       if (l)
       {
          memmove(FileName+l,FileName,f+1);
@@ -4998,8 +4999,16 @@ void usage(void)
 
 void DefineIncludePath(char *path)
 {
+   size_t l = strlen(path);
+
+   if (strlen(Ipa)) ErrorExit("Only one include path\n",path);
+   if (l == 0 || l >= FNSIZE-1)
+   {
+      fprintf(stderr, "Illegal include path\n");
+      exit(1);
+   }
    strcpy(Ipa,path);
-   if (Ipa[strlen(Ipa)-1] != '/') strcat(Ipa,"/");
+   if (Ipa[l-1] != '/') strcat(Ipa,"/");
 }
 
 int main(int argc, char *argv[])
