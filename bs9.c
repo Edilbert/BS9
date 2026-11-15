@@ -4,7 +4,7 @@
 Bit Shift Assembler
 *******************
 
-Version: 14-Nov-2026
+Version: 15-Nov-2026
 
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
@@ -4245,6 +4245,37 @@ void CheckArguments(char *args, int ptr[], int nargs)
 }
 
 
+// ***********
+// ExtractArgs
+// ***********
+
+int ExtractArgs(char *p, char args[])
+{
+   int l,inquo,inapo;
+
+   l          = 0; // length of trimmed operand
+   inquo      = 0; // inside quotes
+   inapo      = 0; // inside apostrophes
+   args[0]  = 0; // empty operand text
+
+   p = SkipSpace(p);  // text after macro name
+   if (!*p) return l; // null args
+   if (!NeedChar(p,'(')) ErrorExit("Missing ( in macro arguments\n",p);
+   p = SkipSpace(p+1);
+
+   while (*p && l < ML-1)
+   {
+      if (*p == '"'  && inapo == 0) inquo = !inquo;
+      if (*p == '\'' && inquo == 0) inapo = !inapo;
+      if (*p == ';'  && inquo == 0 && inapo == 0) break;
+      args[l++] = *p++;
+   }
+   while (l && isspace(args[l-1])) args[--l] = 0;
+   if (args[l-1] != ')') ErrorExit("Missing ) in macro arguments\n",p);
+   args[--l] = 0; // end marker
+   while (l && isspace(args[l-1])) args[--l] = 0;
+   return l;
+}
 // *************
 // ScanArguments
 // *************
@@ -4256,32 +4287,31 @@ int ScanArguments(char *p, char *args, int ptr[], int nargs)
 {
    int l,n;
    char sym[ML];
+   char mal[ML];
+   char *q;
 
    n = 0;
    ptr[0] = 0;
-   p = SkipSpace(p);
-   while (*p != ')')
+   l = ExtractArgs(p,mal);
+   q = mal;
+   while (*q)
    {
-      if (*p == ')' || *p == ',' || *p == 0)
-         ErrorExit("Missing macro parameter\n",p);
-      if (nargs == MAXARGS+1) p = GetSymbol(p,sym);    // dummy   parameter
-      else                    p = GetMacroArg(p,sym);  // current parameter
+      if (nargs == MAXARGS+1) q = GetSymbol(q,sym);    // dummy   parameter
+      else                    q = GetMacroArg(q,sym);  // current parameter
       l = strlen(sym);
       if (l) memmove(args+ptr[n],sym,l+1);
       else   args[ptr[n]] = 0;
       ++n;
       if (n > nargs+1 || n > MAXARGS) ErrorExit("Too many macro parameter\n",p);
       ptr[n] = ptr[n-1] + l + 1;
-      p = SkipSpace(p);
-      if (*p != ',' && *p != ')') ErrorExit("Macro argument error\n",p);
-      if (*p == ',')
+      if (*q)
       {
-         p = SkipSpace(p+1);
-         if (*p == ')') ErrorExit("Missing parameter\n",p);
+         q = SkipSpace(q);
+         if (NeedChar(q,',')) ++q;
+         else ErrorExit("comma expected\n",q);
+         q = SkipSpace(q);
       }
    }
-   p = SkipSpace(p+1);
-   if (*p) ErrorExit("Macro junk error\n",p);
    return n;
 }
 
@@ -4320,20 +4350,19 @@ void RecordMacro(char *p)
    bl = 1;
 
    p = NextSymbol(p,Macro);
-   if (*p == 0) ErrorExit("Macro syntax error c\n",pe);
+   if (Macro[0] == 0) ErrorExit("Macro syntax error c\n",pe);
    l = strlen(Macro);
    if (l == 0) ErrorExit("Unnamed macro\n",pe);
    p = SkipSpace(p);
    if (IsInstruction(Macro) >= 0 || IsPseudo(Macro) >= 0 || IsKeyword(Macro))
       ErrorExit("Macro name is reserved\n",pe);
 
-   if (*p == '(')
+   an = 0;
+   if (*p)
    {
-      an = ScanArguments(p+1,args,ap,MAXARGS+1);
+      an = ScanArguments(p,args,ap,MAXARGS+1);
       CheckArguments(args,ap,an);
    }
-   else if (*p == 0) an = 0;
-   else ErrorExit("Macro syntax error D\n",p);
 
    j = MacroIndex(Macro);
    if (j < 0)  // create new entry in macro table
@@ -4427,11 +4456,8 @@ int ExpandMacro(char *m)
 
    p = NextSymbol(m,Macro);
    p = SkipSpace(p);
-   if (*p == '(') ++p;  // parenthesis are optional
-
-   ExtractOpText(p);    // separate arguments from comment
-   p  = OpText;
-   an = ScanArguments(p,MacArgs,ArgPtr,Mac[j].Narg);
+   an = 0;
+   if (*p) an = ScanArguments(p,MacArgs,ArgPtr,Mac[j].Narg);
 
    if (an != Mac[j].Narg)
    {
@@ -5001,7 +5027,7 @@ void DefineIncludePath(char *path)
 {
    size_t l = strlen(path);
 
-   if (strlen(Ipa)) ErrorExit("Only one include path\n",path);
+   if (strlen(Ipa)) ErrorExit("Only one include path\n",NULL);
    if (l == 0 || l >= FNSIZE-1)
    {
       fprintf(stderr, "Illegal include path\n");
@@ -5128,7 +5154,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 14-Nov-2026         *\n");
+      printf("* Bit Shift Assembler 15-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
