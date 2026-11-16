@@ -483,8 +483,8 @@ char *StrCaseStr(char *s1, const char *s2)
    if (strlen(s1) < l) return NULL;
    for (i=0 ; i < l ; ++i)
       if (toupper(s1[i]) != s2[i]) return NULL;
-   if (s1[l] != ' ' && s1[l] != 0) return NULL;
-   return s1;
+   if (isspace(s1[l]) || s1[l] == 0 || s1[l] == ';') return s1;
+   return NULL;
 }
 
 // ***********
