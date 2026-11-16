@@ -461,28 +461,30 @@ void PutWord(int i, int v)
    ROM[i+1] = v & 0xff;
 }
 
+// *********
+// SkipSpace
+// *********
+
+char *SkipSpace(char *p)
+{
+   if (*p) while (isspace(*p)) ++p;
+   return p;
+}
+
 // **********
 // StrCaseStr
 // **********
 
 char *StrCaseStr(char *s1, const char *s2)
 {
-   char h1[MAX_STR];
-   char h2[MAX_STR];
-   char *r;
-   unsigned int i;
-
-   memset(h1,0,sizeof(h1));
-   memset(h2,0,sizeof(h2));
-
-    for (i=0 ; i < strlen(s1) && i < sizeof(h1)-1 ; ++i)
-        h1[i] = toupper(s1[i]);
-    for (i=0 ; i < strlen(s2) && i < sizeof(h2)-1 ; ++i)
-        h2[i] = toupper(s2[i]);
-
-    r = strstr(h1,h2);
-    if (r) r = s1 + (r - h1);
-    return r;
+   int i,l;
+   l = strlen(s2);
+   s1 = SkipSpace(s1);
+   if (strlen(s1) < l) return NULL;
+   for (i=0 ; i < l ; ++i)
+      if (toupper(s1[i]) != s2[i]) return NULL;
+   if (s1[l] != ' ' && s1[l] != 0) return NULL;
+   return s1;
 }
 
 // ***********
@@ -1000,16 +1002,6 @@ struct MacroStruct
 
 char *MacPtr[MACLEV]; // pointer inside macro body
 int Macros;           // total number of macros
-
-// *********
-// SkipSpace
-// *********
-
-char *SkipSpace(char *p)
-{
-   if (*p) while (isspace(*p)) ++p;
-   return p;
-}
 
 // ********
 // StrMatch
@@ -3391,6 +3383,7 @@ char *ScanRegister(char *p, int *v)
    int i;
    char *q;
 
+   p = SkipSpace(p);
    for (i=15 ; i >= 0 ; --i)
    {
       if (!StrNCaseCmp(RegisterNames[i],p,strlen(RegisterNames[i]))) break;
@@ -3399,7 +3392,6 @@ char *ScanRegister(char *p, int *v)
    *v = i;
    q = p + strlen(RegisterNames[i]);
    q = SkipSpace(q);
-   if (*q == ',') ++q;
    return q;
 }
 
@@ -3822,9 +3814,11 @@ char *GenerateCode(char *p)
          ol = 1 + (oc > 255); // instruction length
          il = ol + 1;
          q = ScanRegister(OpText,&r1);
+         if (*q++ != ',') ErrorExit("comma expected\n",q);
          q = ScanRegister(q     ,&r2);
+         if (*q) ErrorExit("Junk after operands\n",q);
          pb = (r1 << 4) | r2;
-         p += strlen(p) ;          // ignore rest
+         p += strlen(p) ;      // line processed
       }
    }
 
@@ -3861,7 +3855,8 @@ char *GenerateCode(char *p)
          il = 3;
       }
 
-      EvalOperand(OpText,&v,0);
+      rop = EvalOperand(OpText,&v,0);
+      if (*rop) ErrorExit("Junk after target\n",rop);
       relv = v;
       if (v != UNDEF) relv = RelDist(v,pc + il);
       else if (Pass == 1) ++Unresolved;
