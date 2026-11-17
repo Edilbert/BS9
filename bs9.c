@@ -2002,10 +2002,11 @@ char *EvalMultiCharValue(char *p, int *v)
    *v = 0;                     // preset with zero
    for (i=0 ; i < 4 ; ++i)
    {
-      if (*p == '\"') break;   // end quote
+      if (*p == '\"' || *p == 0) break; // end quote or end of operand
       *v = (int)((unsigned)*v << 8) | (unsigned char)*p++;
    }
    if (*p == '\"') ++p;        // end quote
+   else if (*p == 0) ErrorExit("Missing \" delimiter after multi character operand\n",p);
    else ErrorExit("Multi character operand too long ( > 4 )\n",p);
    CheckReserved(*v,p);
    return p;
@@ -2579,7 +2580,7 @@ char *ParseStoreData(char *p)
       if (q)
       {
          p = EvalOperand(q+1,&Entry,0);
-         if (Entry == UNDEF) ErrorExit("Undefined start address",q);
+         if (Entry == UNDEF) ErrorExit("Undefined start address\n",q);
          if (Entry < 0 || Entry > 0xffff)
          {
             ErrorMsg("Illegal execution start address for STORE %d\n",Entry);
@@ -2589,7 +2590,7 @@ char *ParseStoreData(char *p)
       }
    } else p = EndPtr+1;
    p = SkipSpace(p);
-   if (*p != 0 && *p != ';') ErrorExit("STORE syntax error",p);
+   if (*p != 0 && *p != ';') ErrorExit("STORE syntax error\n",p);
 
    if (Start + Length > 0x10000)
    {
@@ -4430,7 +4431,7 @@ void RecordMacro(char *p)
          ++LiNo;
          l = strlen(Line);
          p = strchr(Line,CHAMAC);
-         if (p) ErrorExit("Illegal character ` in macro declaration",p);
+         if (p) ErrorExit("Illegal character ` in macro declaration\n",p);
 
          // parse line and substitute arguments
 
@@ -5252,7 +5253,7 @@ int main(int argc, char *argv[])
    // prog.as9   prog.pp   prog.ls9   prog.opt
 
    l = strlen(argsrc);
-   if (l > FNSIZE - 4)
+   if (l > FNSIZE - 5) // room for extension and string terminator
    {
       fprintf(stderr,"\n*** filename too long ***\n");
       exit(1);
@@ -5267,8 +5268,9 @@ int main(int argc, char *argv[])
    }
    else
    {
-      Src = StrNDup(argsrc,l+4);
-      memmove(Src+l,".as9",4); // add default extension
+      Src = (char *)MallocOrDie(l+5);
+      memmove(Src,argsrc,l);
+      memmove(Src+l,".as9",5); // add default extension
    }
 
    // set static filenames
