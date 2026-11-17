@@ -3320,6 +3320,22 @@ void AddLabel(char *p)
 }
 
 
+// ***************
+// RemoveLastLabel
+// ***************
+
+// Remove the symbol that AddLabel just created and free its memory
+
+void RemoveLastLabel(void)
+{
+   --Labels;
+   free(lab[Labels].Name);
+   free(lab[Labels].Ref);
+   free(lab[Labels].Att);
+   free(lab[Labels].DefFile);
+   memset(&lab[Labels],0,sizeof(lab[Labels]));
+}
+
 void CheckSkip(void)
 {
    int i;
@@ -3353,14 +3369,14 @@ int CheckCondition(char *p)
       {
          nl = Labels;
          p = EvalOperand(p+6,&v,0);
-         if (Labels == nl+1 && lab[nl].Address == UNDEF) Labels = nl; // IFDEF must not create a symbol
+         if (Labels == nl+1 && lab[nl].Address == UNDEF) RemoveLastLabel(); // IFDEF must not create a symbol
          SkipLine[IfLevel] = v == UNDEF;
       }
       else if (Ifndef)
       {
          nl = Labels;
          p = EvalOperand(p+7,&v,0);
-         if (Labels == nl+1 && lab[nl].Address == UNDEF) Labels = nl;
+         if (Labels == nl+1 && lab[nl].Address == UNDEF) RemoveLastLabel();
          SkipLine[IfLevel] = v != UNDEF;
       }
       else // if (Ifval)
