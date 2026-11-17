@@ -155,6 +155,7 @@ LIST +                         switch on  assembler listing
 LIST -                         switch off assembler listing
 BITS . . * . * . . .           stores a byte from 8 bit symbols
 BYTE $20,"Example",0           stores a series of mixed data
+                               (values > 255 or < -128 as 16 bit word)
 WORD LAB_10, WriteTape,$0200   stores a series of word data
 LONG 1000000                   stores 32 bit long data
 REAL  3.1415926                stores a 32 bit real
@@ -169,7 +170,8 @@ TXTTAB BSS 2                   define TXTTAB and increase address pointer by 2
   & = $033A                    set BSS address pointer
 ORG   $E000                    set program counter
 SETDP $20                      assume content of direct page register
-FCB   $20,"Example",0          stores a series of mixed data
+FCB   $20,"Example",0          stores bytes and strings
+                               (each value one byte: -128..255)
 FDB   LAB_10, WriteTape,$0200  stores a series of word data
 FCC   "Example\n"              store ASCII string
 ALIGN 16                       align PC (fill gaps with NOPs)
@@ -2899,7 +2901,11 @@ void CheckHA(char *p)
 // ParseByteData
 // *************
 
-char *ParseByteData(char *p)
+// ByteOnly = 1 (FCB, DB): each value is stored as one byte (-128..255),
+// ByteOnly = 0 (BYTE, FCC, BHEX): values outside the byte range
+//                                 are stored as 16 bit words
+
+char *ParseByteData(char *p, int ByteOnly)
 {
    int i,j,l,v;
    unsigned char ByteBuffer[ML];
@@ -2942,13 +2948,19 @@ char *ParseByteData(char *p)
          p = EvalOperand(p,&v,0);
          if (v == UNDEF && !Pass)
             ErrorExit("Undefined symbol in BYTE data\n",p);
+         if (!Pass && v != UNDEF && ByteOnly && (v < BYTEMIN || v > BYTEMAX))
+         {
+            ErrorMsg("FCB value %d out of range (%d..%d)\n",v,BYTEMIN,BYTEMAX);
+            ErrorLine(p);
+            exit(1);
+         }
          if (!Pass && v != UNDEF && (v < WORDMIN || v > WORDMAX))
          {
             ErrorMsg("value %d out of range\n",v);
             ErrorLine(p);
             exit(1);
          }
-         if (v < BYTEMIN || v > BYTEMAX) ByteBuffer[l++] = (v >> 8) & 255;
+         if (!ByteOnly && (v < BYTEMIN || v > BYTEMAX)) ByteBuffer[l++] = (v >> 8) & 255;
          ByteBuffer[l++] = v & 0xff;
       }
       if (CodeStyle == 1 && *p == ' ') break;
@@ -3072,7 +3084,8 @@ char *EndSub(char *p)
 char *ps_bit5(char *p)   { PrintPC(); return Parsebit5Data(p);}
 char *ps_bits(char *p)   {            return ParseBitData(p); }
 char *ps_bss(char *p)    {            return ParseBSSData(p); }
-char *ps_byte(char *p)   { PrintPC(); return ParseByteData(p); }
+char *ps_byte(char *p)   { PrintPC(); return ParseByteData(p,0); }
+char *ps_fcb(char *p)    { PrintPC(); return ParseByteData(p,1); }
 char *ps_case(char *p)   {            return ParseCaseData(p); }
 char *ps_cmap(char *p)   {            return ParseCmapData(p); }
 char *ps_cpu(char *p)    {            return ParseCPUData(p); }
@@ -3089,10 +3102,10 @@ char *ps_maclist(char *p){            return ParseOnOff(p,&MacList); }
 char *ps_real(char *p)   {            return ParseRealData(p,0); }
 char *ps_size(char *p)   {            return ListSizeInfo(p); }
 char *ps_store(char *p)  {            return ParseStoreData(p); }
-char *ps_string(char *p) { PrintPC(); return ParseByteData(p); }
+char *ps_string(char *p) { PrintPC(); return ParseByteData(p,0); }
 char *ps_subr(char *p)   { PrintPC(); return ParseSubroutine(p); }
 char *ps_word(char *p)   { PrintPC(); return ParseWordData(p); }
-char *ps_bhex(char *p)   { PrintPC(); ForcedHex=1; return ParseByteData(p); }
+char *ps_bhex(char *p)   { PrintPC(); ForcedHex=1; return ParseByteData(p,0); }
 
 char *ps_align(char *p)
 {
@@ -3230,8 +3243,8 @@ struct PseudoStruct PseudoTab[] =
    {"ENDMOD"    , &ps_endsub }, // alias to ENDSUB
    {"ENDSUB"    , &ps_endsub },
    {"EXTERN"    , &ps_ignore },
-   {"FCB"       , &ps_byte   },
-   {"DB"        , &ps_byte   }, // alias to FCB
+   {"FCB"       , &ps_fcb    },
+   {"DB"        , &ps_fcb    }, // alias to FCB
    {"FCC"       , &ps_string },
    {"FDB"       , &ps_word   },
    {"DW"        , &ps_word   }, // alias to FDB
@@ -3681,8 +3694,25 @@ int SetPostByte(char *p, int *v)
    // PC relative
 
    if (df) fprintf(df,"check PC relative %d [%s],<%s>\n",opl,p,p+opl-3);
-   if ((opl > 4 && StrNCaseCmp(p+opl-4,",PCR",4) == 0) ||
-       (opl > 3 && StrNCaseCmp(p+opl-3,",PC" ,3) == 0))
+   // n,PC : n is the offset (like lwasm and the Motorola assembler)
+
+   if (opl > 3 && StrNCaseCmp(p+opl-3,",PC" ,3) == 0)
+   {
+      p = EvalOperand(p,&off,0);
+      if (ForcedMode < 0) CheckOffset8(off,p); // '<' forces 8 bit
+      *v = off;
+      if (ForcedMode < 0 || (ForcedMode == 0 && off >= -128 && off < 128))
+      {
+         ql = 1;
+         return (0x8c | ind);
+      }
+      ql = 2;
+      return (0x8d | ind);
+   }
+
+   // label,PCR : offset is calculated from target address
+
+   if (opl > 4 && StrNCaseCmp(p+opl-4,",PCR",4) == 0)
    {
       if (df) fprintf(df,"check PC relative %s\n",p);
       p = EvalOperand(p,&off,0);
