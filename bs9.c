@@ -907,6 +907,8 @@ int Skipping;        // inside 'false' branch
 int SkipLine[10];    // skipping value for each nesting level
 int ForcedEnd;       // Triggered by END command
 int IgnoreCase;      // 1: Ignore case for symbols
+int OptIgnoreCase;   // IgnoreCase from command line (-i)
+int OptCodeStyle;    // CodeStyle  from command line (-m)
 int ForcedMode;      // -1: direct page, +1: extended
 int Preset;          // value for initialisation
 
@@ -950,9 +952,9 @@ int IncludeLevel;
 
 
 #define MAXARGS 10
-int ArgPtr[MAXARGS+1];       // macro argument pointer
+int ArgPtr[MACLEV][MAXARGS+1]; // macro argument pointer per nesting level
 char Label[ML];              // current label
-char MacArgs[ML];            // macro arguments
+char MacArgs[MACLEV][ML];    // macro arguments per nesting level
 unsigned char Operand[ML];   // binary operand
 char OpText[ML];             // operand source
 char Comment[ML];            // comment source
@@ -1241,9 +1243,12 @@ void ErrorMsg(const char *format, ...) {
    vsnprintf(buf+strlen(buf), SIZE_ERRMSG-strlen(buf), format, args);
    va_end(args);
    fputs(Line, stdout);
-   fputs(Line, lf);
    fputs(buf, stdout);
-   fputs(buf, lf);
+   if (lf) // not yet open while parsing command line options (-D)
+   {
+      fputs(Line, lf);
+      fputs(buf, lf);
+   }
    if (df)
    {
       fputs(Line, df);
@@ -1267,7 +1272,7 @@ void ErrorExit(const char *msg, char *ptr)
 
 void PrintLiNo(void)
 {
-   if (WithLiNo) fprintf(lf,"%5d ",LiNo);
+   if (WithLiNo && ListOn && !Pass) fprintf(lf,"%5d ",LiNo);
 }
 
 
@@ -1277,7 +1282,7 @@ void PrintLiNo(void)
 
 void PrintPC(void)
 {
-   if (!Pass)
+   if (ListOn && !Pass)
    {
       PrintLiNo();
       fprintf(lf,"%4.4x",pc);
@@ -1859,6 +1864,35 @@ char *ParseRealData(char *p, int ldq)
    return p + strlen(p);;
 }
 
+// **************
+// IsRealConstant
+// **************
+
+// Check if text is a floating point constant as accepted by ParseRealData:
+// cosd(...) or a decimal number with '.' or exponent, e.g. 3.14 -2.5e3
+// Symbols like .local or Module.label are not real constants.
+
+int IsRealConstant(char *p)
+{
+   char *q;
+   int real = 0;
+
+   p = SkipSpace(p);
+   if (!StrNCaseCmp(p,"cosd(",5)) return 1;
+   q = p;
+   if (*q == '+' || *q == '-') ++q;
+   if (!isdigit((unsigned char)*q) &&
+      !(*q == '.' && isdigit((unsigned char)q[1]))) return 0;
+   for ( ; *q ; ++q)
+   {
+      if (*q == '.' || *q == 'e' || *q == 'E') real = 1;
+      else if ((*q == '+' || *q == '-') && (q[-1] == 'e' || q[-1] == 'E'));
+      else if (!isdigit((unsigned char)*q)) break;
+   }
+   q = SkipSpace(q);
+   return real && *q == 0;
+}
+
 int RelDist(int target, int base)   // target - base without int overflow
 {
    long long d = (long long)target - base;
@@ -1896,10 +1930,14 @@ char *EvalDecValue(char *p, int *v)
 
    for (i=0 ; i < 5 ; ++i) // allow max. 5 hex digits
       if (!isxdigit(p[i])) break;
-   if (p[i] == 'H' || p[i] == 'h')
+   if (i > 0 && (p[i] == 'H' || p[i] == 'h'))
    {
-      p = EvalHexValue(p,v);
-      return p+1;
+      *v = (int)strtol(p,NULL,16); // max. 5 hex digits: no overflow
+      CheckReserved(*v,p);
+      p += i+1;                    // skip digits and 'H'
+      if (*p == '.' || isalnum((unsigned char)*p))
+         ErrorExit("Illegal character after hex constant\n",p);
+      return p;
    }
 
    // check for decimal value
@@ -1928,11 +1966,14 @@ char *EvalCharValue(char *p, int *v)
    // we fix it here quietly by assuming that '\\' was intended
    // apostrophe would be coded as '\''
 
-   // printf("%s %d %c\n",p,strncmp(p,"'\\'",3),p[3]);
-   if (p[0]=='\\' && p[1]=='\'' && p[3]!='\'')
+   // p points after the opening apostrophe:
+   // '\'' -> p = \''  (escaped apostrophe, handled below)
+   // '\'  -> p = \'   (backslash, no third apostrophe)
+
+   if (p[0]=='\\' && p[1]=='\'' && p[2]!='\'')
    {
-      *v = 0x27; // apostrophe
-      p+=2;
+      *v = 0x5c; // backslash
+      p+=1;      // p points to closing apostrophe
    }
 
    else if (*p == '\\')
@@ -2415,18 +2456,15 @@ char *ListSizeInfo(char *p)
    int i;
    p += strlen(p);
 
-   if (!ModuleStart) return p;
    if (ListOn && !Pass)
    {
-      i = AddressIndex(ModuleStart);
-      if (i >= 0)
-      {
-         fprintf(lf,"              %s",Line);
+      PrintPC();
+      fprintf(lf,"              %s",Line);
+      if (ModuleStart && (i = AddressIndex(ModuleStart)) >= 0)
          fprintf(lf," ;%5d [%s]",pc-ModuleStart,lab[i].Name);
-         ModuleStart = 0;
-      }
       fprintf(lf,"\n");
    }
+   ModuleStart = 0;
    return p;
 }
 
@@ -2657,7 +2695,10 @@ char *ParseBSSData(char *p)
       exit(1);
    }
    if (ListOn && !Pass)
-      fprintf(lf,"%4.4x             %s\n",bss,Line);
+   {
+      PrintLiNo();
+      fprintf(lf,"%4.4x              %s\n",bss,Line);
+   }
    bss += m;
    return p;
 }
@@ -2723,10 +2764,10 @@ char *ParseBitData(char *p)
       else if (*p != '.')
          ErrorExit("use only '*' for 1 and '.' for 0 in BITS statement\n",p);
    }
+   if (!Pass) PutByte(pc,v); // store also with LIST - or MACLIST OFF
    if (ListOn && !Pass)
    {
       PrintPC();
-      PutByte(pc,v);
       fprintf(lf," %2.2x           ",v);
       fprintf(lf,"%s\n",Line);
    }
@@ -2754,7 +2795,12 @@ char *ParseCmapData(char *p)
    {
       if (ListOn) PrintPC();
       if (scanline < 0) PutByte(pc,v);
-      else PutByte(pc+2*scanline-7,v);
+      else
+      {
+         if (pc+2*scanline-7 < 0)
+            ErrorExit("CMAP scanline address below $0000\n",p);
+         PutByte(pc+2*scanline-7,v);
+      }
       if (ListOn)
       {
          fprintf(lf," %2.2x       ",v);
@@ -2768,6 +2814,7 @@ char *ParseCmapData(char *p)
 char *ParseASCII(char *p, unsigned char b[], int *l)
 {
    char Delimiter;
+   int Start = *l; // index of first character of this string
 
    Delimiter = *p++;
    while (*p && *p != Delimiter && *l < ML-1)
@@ -2796,6 +2843,7 @@ char *ParseASCII(char *p, unsigned char b[], int *l)
    if (*p == Delimiter) ++p;
    if (*p == '^')
    {
+      if (*l == Start) ErrorExit("Empty string before '^'\n",p);
       b[(*l)-1] |= 0x80; // Set bit 7 of last char
       ++p;
    }
@@ -2971,11 +3019,7 @@ char *ParseSubroutine(char *p)
 
 char *EndSub(char *p)
 {
-   if (!Pass && ListOn)
-   {
-      PrintPC();
-      p = ListSizeInfo(p);
-   }
+   p = ListSizeInfo(p);
    Scope[0] = 0;
    ModuleStart = 0;
    return p;
@@ -2987,23 +3031,23 @@ char *EndSub(char *p)
 
 char *ps_bit5(char *p)   { PrintPC(); return Parsebit5Data(p);}
 char *ps_bits(char *p)   {            return ParseBitData(p); }
-char *ps_bss(char *p)    { PrintPC(); return ParseBSSData(p); }
+char *ps_bss(char *p)    {            return ParseBSSData(p); }
 char *ps_byte(char *p)   { PrintPC(); return ParseByteData(p); }
-char *ps_case(char *p)   { PrintPC(); return ParseCaseData(p); }
-char *ps_cmap(char *p)   { PrintPC(); return ParseCmapData(p); }
+char *ps_case(char *p)   {            return ParseCaseData(p); }
+char *ps_cmap(char *p)   {            return ParseCmapData(p); }
 char *ps_cpu(char *p)    {            return ParseCPUData(p); }
 char *ps_end(char *p)    { PrintLine(); ForcedEnd = 1; return p; }
 char *ps_endsub(char *p) {            return EndSub(p); }
-char *ps_fill(char *p)   { PrintPC(); return ParseFillData(p); }
+char *ps_fill(char *p)   {            return ParseFillData(p); }
 char *ps_formln(char *p) { FormLn = atoi(p); PrintByteLine(FormLn); return p; }
 char *ps_ignore(char *p) { PrintLine(); return p; }
-char *ps_include(char *p){ PrintPC(); return IncludeFile(p); }
-char *ps_list(char *p)   { PrintPC(); return ParseListOption(p); }
-char *ps_load(char *p)   { PrintPC(); return ParseLoadData(p); }
+char *ps_include(char *p){            return IncludeFile(p); }
+char *ps_list(char *p)   {            return ParseListOption(p); }
+char *ps_load(char *p)   {            return ParseLoadData(p); }
 char *ps_long(char *p)   { PrintPC(); return ParseLongData(p); }
 char *ps_maclist(char *p){            return ParseOnOff(p,&MacList); }
 char *ps_real(char *p)   {            return ParseRealData(p,0); }
-char *ps_size(char *p)   { PrintPC(); return ListSizeInfo(p); }
+char *ps_size(char *p)   {            return ListSizeInfo(p); }
 char *ps_store(char *p)  {            return ParseStoreData(p); }
 char *ps_string(char *p) { PrintPC(); return ParseByteData(p); }
 char *ps_subr(char *p)   { PrintPC(); return ParseSubroutine(p); }
@@ -3212,7 +3256,8 @@ char *CheckPseudo(char *p)
       if (pc < 0)
       {
          static const char *Emit[] = {"BITS","BYTE","FCB","DB","FCC","FDB","DW",
-                                      "FILL","LONG","REAL","WORD","RMB","DS",NULL};
+                                      "FILL","LONG","REAL","WORD","RMB","DS",
+                                      "BHEX","C5TO3","CMAP",NULL};
          int k;
          for (k=0 ; Emit[k] ; ++k)
             if (!strcmp(PseudoTab[i].keyword,Emit[k]))
@@ -3336,6 +3381,7 @@ int CheckCondition(char *p)
    else if (!strcmpword(p,"else"))
    {
       r = 1;
+      if (IfLevel < 1) ErrorExit("else without if\n",p);
       SkipLine[IfLevel] = !SkipLine[IfLevel];
       CheckSkip();
       PrintLiNo();
@@ -3914,7 +3960,7 @@ char *GenerateCode(char *p)
          ErrorMsg("Illegal immediate instruction %s %s\n",Mat[MneIndex].Mne,OpText);
          exit(1);
       }
-      if (oc == 0xcd && strchr(OpText+1,'.')) // LDQ #real constant
+      if (oc == 0xcd && IsRealConstant(OpText+1)) // LDQ #real constant
       {
          rop = ParseRealData(OpText+1,1);
          v = (int)(((unsigned)Operand[0] << 24) | ((unsigned)Operand[1] << 16) |
@@ -4086,19 +4132,11 @@ char *GenerateCode(char *p)
       p = EvalOperand(p,&v,0);
       if (XIM)
       {
-         ol = 2;
-         if (v > 255 || ForcedMode > 0)
-         {
-            oc = XIM;
-            ql = 2;
-         }
-         else
-         {
-            oc = XIM = XIM & 0xfff; // extended -> direct
-            ql = 1;
-         }
-         il = ol + ql;
-         if (df) fprintf(df,"XIM oc = %4.4x  v = %4.4x il = %d\n",oc,v,il);
+         // start with extended mode, the code below switches to
+         // direct mode (XIM & 0xfff) if the address is in the direct page
+
+         oc = XIM;
+         if (df) fprintf(df,"XIM oc = %4.4x  v = %4.4x\n",oc,v);
       }
 
       // extended address mode
@@ -4129,7 +4167,7 @@ char *GenerateCode(char *p)
             }
          }
 
-         if (Optimize)
+         if (Optimize && ForcedMode <= 0) // '>' forces extended JMP/JSR
          {
             // replace short JMP with BRA
 
@@ -4471,8 +4509,12 @@ int ExpandMacro(char *m)
 
    p = NextSymbol(m,Macro);
    p = SkipSpace(p);
+   // arguments are stored per nesting level, so that a nested macro call
+   // does not overwrite the arguments of the calling macro
+
+   if (MacLev >= MACLEV-1) ErrorExit("Too many nested macros\n",Line);
    an = 0;
-   if (*p) an = ScanArguments(p,MacArgs,ArgPtr,Mac[j].Narg);
+   if (*p) an = ScanArguments(p,MacArgs[MacLev+1],ArgPtr[MacLev+1],Mac[j].Narg);
 
    if (an != Mac[j].Narg)
    {
@@ -4484,7 +4526,6 @@ int ExpandMacro(char *m)
 
    if (Mac[j].Body) // ignore empty macros
    {
-      if (MacLev >= MACLEV-1) ErrorExit("Too many nested macros\n",Line);
       ++MacLev;
       MacPtr[MacLev] = Mac[j].Body;
    }
@@ -4498,10 +4539,15 @@ int ExpandMacro(char *m)
 }
 
 
+// The expanded line is limited to ML-1 characters, the same limit
+// that GetLine applies to source lines. Longer lines would overflow
+// Line[] and the operand buffers (OpText, ...) during parsing.
+
 void NextMacLine(char *w)
 {
-   int i;
+   int i,l;
    char *r;
+   char Buf[ML];
 
    // do not count macro expansion lines
 
@@ -4511,7 +4557,7 @@ void NextMacLine(char *w)
 
    while (MacLev > 0 && *MacPtr[MacLev] == 0) --MacLev;
 
-
+   l = 0;
    if (MacPtr[MacLev] && *MacPtr[MacLev])
    {
       while (*MacPtr[MacLev] &&
@@ -4520,15 +4566,24 @@ void NextMacLine(char *w)
          if (*MacPtr[MacLev] == CHAMAC)
          {
             i = *(++MacPtr[MacLev]) - '0';
-            r = MacArgs + ArgPtr[i];
-            while (*r) *w++ = *r++;
+            r = MacArgs[MacLev] + ArgPtr[MacLev][i];
+            while (*r)
+            {
+               if (l >= ML-1) ErrorExit("Expanded macro line too long\n",NULL);
+               Buf[l++] = *r++;
+            }
             ++MacPtr[MacLev];
          }
-         else *w++ = *MacPtr[MacLev]++;
+         else
+         {
+            if (l >= ML-1) ErrorExit("Expanded macro line too long\n",NULL);
+            Buf[l++] = *MacPtr[MacLev]++;
+         }
       }
       if (*MacPtr[MacLev] == '\n') ++MacPtr[MacLev];
    }
-   *w = 0;
+   Buf[l] = 0;
+   strcpy(w,Buf);
 }
 
 
@@ -4539,6 +4594,7 @@ void ParseLine(char *cp)
 
    am = -1;
    oc = -1;
+   MneIndex = -1;               // no mnemonic found yet in this line
    Label[0] = 0;
    OpText[0] = 0;
    Comment[0] = 0;
@@ -4566,7 +4622,7 @@ void ParseLine(char *cp)
    }
    if (*cp == 0)  // Empty
    {
-      if (!Pass)
+      if (ListOn && !Pass)
       {
           PrintLiNo();
           fputc('\n',lf);
@@ -4690,15 +4746,36 @@ int CloseInclude(void)
    return feof(sf);
 }
 
+// **************
+// ResetPassState
+// **************
+
+// Settings changed by the source code (ORG, SETDP, CASE, CPU, ...)
+// must not leak from the end of one pass into the start of the next one.
+
+void ResetPassState(void)
+{
+   pc          =   -1;
+   bss         =   -1;
+   EnumValue   =   -1;
+   ForcedEnd   =    0;
+   MacLev      =    0;
+   DP          =    0;
+   CPU         = 6309;           // default CPU at the start of every pass
+   DimOp       = DIMOP_6309;
+   RegisterNames = Register_6309;
+   IgnoreCase  = OptIgnoreCase;
+   CodeStyle   = OptCodeStyle;
+   Scope[0]    =    0;
+   ModuleStart =    0;
+}
+
 void Phase1(void)
 {
    int Eof;
 
-   ForcedEnd = 0;
+   ResetPassState();
    Changes   = 0;
-   CPU       = 6309;            // default CPU at the start of every pass
-   DimOp     = DIMOP_6309;
-   RegisterNames = Register_6309;
    LiNo      = 0;
    TotalLiNo = 0;
 
@@ -4727,17 +4804,8 @@ void Phase2(void)
 {
    int Eof;
 
-   pc        =   -1;
-   bss       =   -1;
-   EnumValue =   -1;
-   ForcedEnd =    0;
-   MacLev    =    0;
+   ResetPassState();
    ListOn    =    1;
-   CPU       = 6309;
-   DimOp     = DIMOP_6309;
-   RegisterNames = Register_6309;
-   Scope[0]  =    0;
-   ModuleStart =  0;
 
    if (IfLevel)
    {
@@ -5171,6 +5239,9 @@ int main(int argc, char *argv[])
          usage();
       }
    }
+   OptIgnoreCase = IgnoreCase;
+   OptCodeStyle  = CodeStyle;
+
    if (!argsrc)
    {
       printf("*** missing filename for assembler source file ***\n");
