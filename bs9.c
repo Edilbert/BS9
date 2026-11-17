@@ -480,7 +480,7 @@ char *StrCaseStr(char *s1, const char *s2)
    int i,l;
    l = strlen(s2);
    s1 = SkipSpace(s1);
-   if (strlen(s1) < l) return NULL;
+   if ((int)strlen(s1) < l) return NULL;
    for (i=0 ; i < l ; ++i)
       if (toupper(s1[i]) != s2[i]) return NULL;
    if (isspace(s1[l]) || s1[l] == 0 || s1[l] == ';') return s1;
@@ -3463,14 +3463,12 @@ int PostIndexReg(int reg,char *p)
 
 int PostIndexW(int reg,char *p)
 {
-   int r;
    if (*p == 'w' || *p == 'W')
    {
-      if (CPU == 6309) r = 0xf;
+      if (CPU == 6309) return 0xf;
       else OperandError(p);
    }
-   else r = PostIndex(reg,p);
-   return r;
+   return PostIndex(reg,p);
 }
 
 // ***********
