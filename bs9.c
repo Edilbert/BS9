@@ -193,8 +193,8 @@ $ffd2       hex constant
 
 Unary  operators in address calculations
 ========================================
-<    low byte
->    extended address (override DP mode)
+<    force direct page / 8 bit mode (it does NOT select the low byte)
+>    force extended / 16 bit mode (override DP mode)
 (    parenthesis
 )    parenthesis
 +    positive sign
@@ -967,6 +967,7 @@ char datebuffer [80];
 #define LDEF 1
 #define LBSS 2
 #define LPOS 3
+#define LSET 4  // only used as DefKind, SET is listed as LDEF
 
 #define MAXLAB 8000
 
@@ -977,8 +978,9 @@ struct LabelStruct
    int   Address;  // Range 0 - 65536
    int   Bytes;    // Length of object (string for example)
    int   Locked;   // Cannot change value
-   char *DefFile;  // file of first EQU/=/ENUM/SET definition
+   char *DefFile;  // file of first definition ("" = command line)
    int   DefLine;  // line of first definition
+   int   DefKind;  // kind of first definition: LDEF, LSET, LBSS, LPOS
    int   NumRef;   // # of references
    int  *Ref;      // list of references
    int  *Att;      // list of attributes
@@ -1542,6 +1544,40 @@ struct LabelDefStruct
 };
 
 
+// ***************
+// CheckDefinition
+// ***************
+
+// Remember where label j is defined for the first time.
+// Returns 1 for the first definition or for the same definition
+// in a later pass, 0 for a further EQU or SET at another place
+// (EQU is checked by value, SET may be reassigned).
+// All other definitions at another place are errors.
+
+int CheckDefinition(int j, int kind)
+{
+   char *site;
+
+   site = IncludeStack[IncludeLevel].Src ? IncludeStack[IncludeLevel].Src : "";
+   if (!lab[j].DefFile)
+   {
+      lab[j].DefFile = (char *)StrNDup(site,strlen(site));
+      lab[j].DefLine = LiNo;
+      lab[j].DefKind = kind;
+      return 1;
+   }
+   if (lab[j].DefLine == LiNo && !strcmp(lab[j].DefFile,site)) return 1;
+   if (kind == lab[j].DefKind && (kind == LDEF || kind == LSET)) return 0;
+   ++ErrNum;
+   if (lab[j].DefFile[0])
+      ErrorMsg("Label [%s] already defined in file %s line %d\n",
+               lab[j].Name,lab[j].DefFile,lab[j].DefLine);
+   else
+      ErrorMsg("Label [%s] already defined on command line (-D)\n",
+               lab[j].Name);
+   exit(1);
+}
+
 // ***********
 // DefineLabel
 // ***********
@@ -1549,7 +1585,7 @@ struct LabelDefStruct
 char *DefineLabel(char *p, int *val, char Type)
 {
    int i,j,l,v,same;
-   char *rop,*site;
+   char *rop;
 
    *val = UNDEF; // preset
 
@@ -1583,6 +1619,7 @@ char *DefineLabel(char *p, int *val, char Type)
       }
       lab[j].Ref[0] = LiNo;
       lab[j].Att[0] = LDEF;
+      same = CheckDefinition(j, LabDef[i].Type < 0 ? LSET : LDEF);
 
       ExtractOpText(p);
       if (OpText[0])
@@ -1594,13 +1631,6 @@ char *DefineLabel(char *p, int *val, char Type)
          // evaluated again in every pass, but a second definition elsewhere
          // with another value is an error. SET defines a variable and may
          // be reassigned at any time.
-         site = IncludeStack[IncludeLevel].Src ? IncludeStack[IncludeLevel].Src : "";
-         if (!lab[j].DefFile)
-         {
-            lab[j].DefFile = (char *)StrNDup(site,strlen(site));
-            lab[j].DefLine = LiNo;
-         }
-         same = lab[j].DefLine == LiNo && !strcmp(lab[j].DefFile,site);
          if (LabDef[i].Type < 0 || same || lab[j].Address == UNDEF)
              lab[j].Address = v;
          else if (Pass == 0 && v != UNDEF && lab[j].Address != v)
@@ -1617,6 +1647,13 @@ char *DefineLabel(char *p, int *val, char Type)
       }
       else if (LabDef[i].Type > 0) // ENUM
       {
+         if (!same) // ENUM without value at a second place
+         {
+            ++ErrNum;
+            ErrorMsg("Label [%s] already defined in file %s line %d\n",
+                     lab[j].Name,lab[j].DefFile,lab[j].DefLine);
+            exit(1);
+         }
          *val = ++EnumValue;
          lab[j].Address = *val;
       }
@@ -1639,6 +1676,7 @@ char *DefineLabel(char *p, int *val, char Type)
       }
       lab[j].Ref[0] = LiNo;
       lab[j].Att[0] = LBSS;
+      CheckDefinition(j, LBSS);
       if (lab[j].Address >= UNDEF) lab[j].Address = bss;
       else if (lab[j].Address != bss)
       {
@@ -1665,8 +1703,9 @@ char *DefineLabel(char *p, int *val, char Type)
          lab[j].Att = (int *)MallocOrDie(sizeof(int));
          Labels++;
       }
-      else if (lab[j].Address == UNDEF) lab[j].Address = pc;
-      else if (lab[j].Address != pc && !lab[j].Locked)
+      CheckDefinition(j, LPOS);
+      if (lab[j].Address == UNDEF) lab[j].Address = pc;
+      else if (lab[j].Address != pc)
       {
          if (Pass)
          {
@@ -3815,6 +3854,8 @@ char *GenerateCode(char *p)
          ql =      1;
          il =      3;
       }
+      if (OpText[0] && CodeStyle != 1)
+         ErrorExit("Instruction has no operand\n",p);
       p += strlen(p) ;          // ignore rest
    }
 
@@ -3858,6 +3899,8 @@ char *GenerateCode(char *p)
          else ErrorExit("Missing comma\n",p);
          q = TFMRegister(q     ,&r2);
          if (*q == '+' || *q == '-') p2 = *q++;
+         q = SkipSpace(q);
+         if (*q) ErrorExit("Junk after operands\n",q);
          pb = (r1 << 4) | r2;
          p += strlen(p) ;          // ignore rest
 
@@ -4034,6 +4077,7 @@ char *GenerateCode(char *p)
       if (!strchr((XIM ? p : OpText)+1,',')) // indirect address
       {
          p = EvalOperand((XIM ? p : OpText)+1,&v,0);
+         if (*SkipSpace(p) != ']') ErrorExit("Junk after operand\n",p);
          pb = 0x9f;
          ql = 2;
          il = ol + 3;
@@ -4098,6 +4142,8 @@ char *GenerateCode(char *p)
       if (!p || !q) ErrorExit("Illegal syntax in bit operand\n",p);
       *q = 0; // separate bit number from address
       p = EvalOperand(p+1,&v,0);
+      if (*SkipSpace(p)) ErrorExit("Junk after address\n",p);
+      if (q[1] == 0 || q[2] != 0) ErrorExit("Illegal syntax in bit operand\n",q+1);
       if (v != UNDEF && (v < 0 || v > 255))
       {
          ++ErrNum;
@@ -4147,6 +4193,7 @@ char *GenerateCode(char *p)
    else
    {
       p = EvalOperand(p,&v,0);
+      if (*p) ErrorExit("Junk after operand\n",p);
       if (XIM)
       {
          // start with extended mode, the code below switches to
