@@ -1,5 +1,7 @@
 # BS9 Reference Manual
 
+*Deutsche Fassung: [MANUAL_de.md](MANUAL_de.md)*
+
 BS9 (Bit Shift Assembler) is a cross-assembler for the Motorola **6809** and
 the Hitachi **6309** CPU. It runs on any host with a standard C compiler
 (Linux, macOS, Windows, ...) and produces binary images, Motorola S-records
