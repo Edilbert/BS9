@@ -3577,9 +3577,26 @@ int PostIndexW(int reg,char *p)
 // SetPostByte
 // ***********
 
+// ************
+// CheckOffset8
+// ************
+
+// A forced 8 bit offset (operand with '<') must be in the signed range
+
+void CheckOffset8(int off, char *p)
+{
+   if (!Pass && off != UNDEF && (off < -128 || off > 127))
+   {
+      ++ErrNum;
+      ErrorMsg("8 bit offset out of range (%d)\n",off);
+      ErrorLine(p);
+      exit(1);
+   }
+}
+
 int SetPostByte(char *p, int *v)
 {
-   int inc,dec,reg,amo,off,ind,opl;
+   int inc,dec,reg,amo,off,ind,opl,hasoff;
 
    ind =  0;  // indirect bit
    inc =  0;  // auto increment counter
@@ -3669,9 +3686,11 @@ int SetPostByte(char *p, int *v)
    {
       if (df) fprintf(df,"check PC relative %s\n",p);
       p = EvalOperand(p,&off,0);
+      hasoff = off;                          // target address
       if (oc > 255) off = RelDist(off,pc+4); // two byte opcodes
       else          off = RelDist(off,pc+3);
-      if (ForcedMode < 0 || (off >= -128 && off < 128))
+      if (ForcedMode < 0 && hasoff != UNDEF) CheckOffset8(off,p); // '<' forces 8 bit
+      if (ForcedMode < 0 || (ForcedMode == 0 && off >= -128 && off < 128))
       {
          ql = 1;
          *v = off;
@@ -3687,14 +3706,15 @@ int SetPostByte(char *p, int *v)
 
    // offset
 
-   if (*p != ',')
+   hasoff = (*p != ',');
+   if (hasoff)
    {
       p = EvalOperand(p,&off,0);
    }
 
-   // zero offset
+   // zero offset (an explicit 0 with '<' or '>' is a forced 8/16 bit offset)
 
-   if (*p == ',' && off == 0)
+   if (*p == ',' && off == 0 && (!hasoff || ForcedMode == 0))
    {
       while (*(++p) == '-') ++dec;
       reg = PostIndexW(reg,p);
@@ -3733,18 +3753,21 @@ int SetPostByte(char *p, int *v)
 
       if (reg == 0xf) // W register
       {
+         if (ForcedMode < 0) ErrorExit("No 8 bit offset for W register\n",p);
          ql = 2;
          if (ind) return 0xb0;
          else     return 0xaf;
       }
+      // '<' forces an 8 bit offset, '>' forces a 16 bit offset
                                              // 5 bit offset
-      if (ForcedMode <= 0 && off >= -16 && off < 16 && ind == 0)
+      if (ForcedMode == 0 && off >= -16 && off < 16 && ind == 0)
       {
          ql = 0; // no following bytes
          return (reg | (off & 0x1f));
       }                                      // 8 bit offset
 
-      if (ForcedMode <  0 || (off >= -128 && off < 128))
+      if (ForcedMode < 0) CheckOffset8(off,p);
+      if (ForcedMode < 0 || (ForcedMode == 0 && off >= -128 && off < 128))
       {
          ql = 1; // one following byte
          return (0x80 | reg | ind | 0x08);
