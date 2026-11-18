@@ -1570,6 +1570,7 @@ int CheckDefinition(int j, int kind)
    }
    if (lab[j].DefLine == LiNo && !strcmp(lab[j].DefFile,site)) return 1;
    if (kind == lab[j].DefKind && (kind == LDEF || kind == LSET)) return 0;
+   if (Pass || lab[j].Address == pc) return 1;
    ++ErrNum;
    if (lab[j].DefFile[0])
       ErrorMsg("Label [%s] already defined in file %s line %d\n",
