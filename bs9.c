@@ -4,8 +4,6 @@
 Bit Shift Assembler
 *******************
 
-Version: 15-Nov-2026
-
 The assembler was developed and tested on a MAC with macOS Catalina.
 Using no specific options of the host system, it should run on any
 computer with a standard C-compiler, e.g. Linux, Windows, Amiga OS, etc.
@@ -888,7 +886,7 @@ int CodeStyle;       // 1: operand has no spaces (old form)
 int MneIndex;        // current mnemonic
 int ForcedHex  =  0; // used for BHEX pseudo
 
-#define MAXPASS 10
+#define MAXPASS 30
 int MaxPass=MAXPASS;
 int Pass;            // pass counter (0 = last pass stores code)
 int Changes;         // label address changes
@@ -5406,7 +5404,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 15-Nov-2026         *\n");
+      printf("* Bit Shift Assembler 19-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
