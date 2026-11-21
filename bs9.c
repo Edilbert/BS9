@@ -5196,6 +5196,12 @@ const char *Stat(int o)
 
 void usage(void)
 {
+   printf("\n");
+   printf("*******************************************\n");
+   printf("* Bit Shift Assembler 21-Nov-2026         *\n");
+   printf("* Today is            %s         *\n",datebuffer);
+   printf("*******************************************\n");
+
    printf("Usage: bs9 [options] <source>\n");
    printf("Options:\n");
    printf("   -d print details in file <Debug.lst>\n");
@@ -5395,7 +5401,7 @@ int main(int argc, char *argv[])
    {
       printf("\n");
       printf("*******************************************\n");
-      printf("* Bit Shift Assembler 19-Nov-2026         *\n");
+      printf("* Bit Shift Assembler 21-Nov-2026         *\n");
       printf("* Today is            %s         *\n",datebuffer);
       printf("* --------------------------------------- *\n");
       printf("* Source: %-31.31s *\n",Src);
